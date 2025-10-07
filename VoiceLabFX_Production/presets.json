@@ -1,0 +1,241 @@
+{
+  "presets": {
+    "Spotty Caller": {
+      "description": "Poor cellular connection with network artifacts (dropouts, jitter, packet loss)",
+      "quality_tier": "low",
+      "source": {
+        "dereverb": 0.5,
+        "src_hpf": 80,
+        "src_lpf": 8000,
+        "leveler_amt": 0.7,
+        "wpe_strength": 0.0,
+        "cleanup_mix": 1.0
+      },
+      "room_ir": {
+        "file": null,
+        "mix_percent": 0
+      },
+      "codec": {
+        "mu_law_amt": 0.3,
+        "bandwidth_override": null
+      },
+      "network_artifacts": {
+        "rf_noise": 0.08,
+        "dropout_prob": 0.12,
+        "plc_ms": 45,
+        "dropout_depth_db": -30,
+        "garble_intensity": 0.15,
+        "stutter_amt": 0.025,
+        "jitter_intensity": 0.08,
+        "reorder_prob": 0.03
+      },
+      "background": {
+        "files": [],
+        "gain_db": -60,
+        "hpf": 60,
+        "lpf": 8000,
+        "duck_db": -60
+      },
+      "background_ir": {
+        "file": null,
+        "gain_db": 0
+      },
+      "handset_ir": {
+        "file": "assets/irs/cellphone_dry_trimmed.ogg",
+        "gain_db": -3
+      },
+      "events": {
+        "traffic_files": [],
+        "traffic_ev_min": 0,
+        "traffic_vol_db": -20,
+        "baby_ev_min": 0,
+        "dog_ev_min": 0
+      },
+      "output": {
+        "target_lufs": -18
+      }
+    },
+    "Street Sounds": {
+      "description": "Outdoor caller with traffic and urban background ambience",
+      "quality_tier": "standard",
+      "source": {
+        "dereverb": 0.3,
+        "src_hpf": 60,
+        "src_lpf": 12000,
+        "leveler_amt": 0.6,
+        "wpe_strength": 0.0,
+        "cleanup_mix": 1.0
+      },
+      "room_ir": {
+        "file": null,
+        "mix_percent": 0
+      },
+      "codec": {
+        "mu_law_amt": 0.15,
+        "bandwidth_override": null
+      },
+      "network_artifacts": {
+        "rf_noise": 0.03,
+        "dropout_prob": 0.03,
+        "plc_ms": 30,
+        "dropout_depth_db": -35,
+        "garble_intensity": 0.05,
+        "stutter_amt": 0.008,
+        "jitter_intensity": 0.02,
+        "reorder_prob": 0.01
+      },
+      "background": {
+        "files": [
+          "assets/backgrounds/Street Noise -15db 15 min 1_48k.ogg",
+          "assets/backgrounds/Street Noise -15db 15 min 2_48k.ogg",
+          "assets/backgrounds/Street Noise -15db 15 min 4_48k.ogg",
+          "assets/backgrounds/Street Noise -15db 15 min 5_48k.ogg",
+          "assets/backgrounds/street_B_48k.ogg"
+        ],
+        "gain_db": -22,
+        "hpf": 80,
+        "lpf": 6000,
+        "duck_db": -12
+      },
+      "background_ir": {
+        "file": null,
+        "gain_db": 0
+      },
+      "handset_ir": {
+        "file": "assets/irs/cellphone_dry_trimmed.ogg",
+        "gain_db": -4
+      },
+      "events": {
+        "traffic_files": [
+          "assets/car_horns/425848__soundholder__renault-master-f3500-dci135-foley-horn-outside-mono_48k.ogg"
+        ],
+        "traffic_ev_min": 4,
+        "traffic_vol_db": -18,
+        "baby_ev_min": 0,
+        "dog_ev_min": 0
+      },
+      "output": {
+        "target_lufs": -18
+      }
+    },
+    "Bathroom Caller": {
+      "description": "Indoor caller with bathroom reverb and party music in the next room",
+      "quality_tier": "standard",
+      "source": {
+        "dereverb": 0.0,
+        "src_hpf": 60,
+        "src_lpf": 12000,
+        "leveler_amt": 0.5,
+        "wpe_strength": 0.0,
+        "cleanup_mix": 1.0
+      },
+      "room_ir": {
+        "file": "assets/irs/bathroom.ogg",
+        "mix_percent": 12
+      },
+      "codec": {
+        "mu_law_amt": 0.15,
+        "bandwidth_override": null
+      },
+      "network_artifacts": {
+        "rf_noise": 0.02,
+        "dropout_prob": 0.02,
+        "plc_ms": 25,
+        "dropout_depth_db": -40,
+        "garble_intensity": 0.03,
+        "stutter_amt": 0.005,
+        "jitter_intensity": 0.015,
+        "reorder_prob": 0.008
+      },
+      "background": {
+        "files": [
+          "assets/Party Music/techno 1_48k.ogg",
+          "assets/Party Music/techno 2_48k.ogg"
+        ],
+        "gain_db": -28,
+        "hpf": 20,
+        "lpf": 1200,
+        "duck_db": -18
+      },
+      "background_ir": {
+        "file": null,
+        "gain_db": 0
+      },
+      "handset_ir": {
+        "file": null,
+        "gain_db": 0
+      },
+      "events": {
+        "traffic_files": [],
+        "traffic_ev_min": 0,
+        "traffic_vol_db": -20,
+        "baby_ev_min": 0,
+        "dog_ev_min": 0
+      },
+      "output": {
+        "target_lufs": -18
+      }
+    }
+  },
+  "user_controls": {
+    "global": [
+      {
+        "type": "slider",
+        "label": "Effect Intensity",
+        "description": "Overall strength of all preset effects (0% = bypass, 100% = full preset)",
+        "parameter": "intensity_multiplier",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 1.0
+      },
+      {
+        "type": "slider",
+        "label": "Output Level (LUFS)",
+        "description": "Target loudness for broadcast normalization",
+        "parameter": "target_lufs",
+        "min": -23.0,
+        "max": -14.0,
+        "step": 0.5,
+        "default": -18.0
+      }
+    ],
+    "preset_specific": {
+      "Street Sounds": [
+        {
+          "type": "slider",
+          "label": "Background Level",
+          "description": "Traffic/urban ambience volume",
+          "parameter": "bg_gain_db",
+          "min": -40.0,
+          "max": -12.0,
+          "step": 1.0,
+          "default": -22.0
+        }
+      ],
+      "Bathroom Caller": [
+        {
+          "type": "slider",
+          "label": "Reverb Amount",
+          "description": "Bathroom reverb wetness",
+          "parameter": "room_ir_mix_percent",
+          "min": 0.0,
+          "max": 25.0,
+          "step": 1.0,
+          "default": 12.0
+        },
+        {
+          "type": "slider",
+          "label": "Party Music Level",
+          "description": "Muffled party music from next room",
+          "parameter": "bg_gain_db",
+          "min": -40.0,
+          "max": -18.0,
+          "step": 1.0,
+          "default": -28.0
+        }
+      ]
+    }
+  },
+  "schema": 2
+}

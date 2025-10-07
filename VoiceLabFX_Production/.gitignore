@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# Virtual env
+.env
+.venv/
+env/
+venv/
+
+# Mac / OS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Hugging Face cache
+.cache/
+
+# Audio assets
+assets/*.wav
+assets/*.mp3
+assets/*.flac

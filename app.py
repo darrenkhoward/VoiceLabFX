@@ -272,7 +272,7 @@ def _save_wav_tmp(y: np.ndarray, sr: int = SR) -> str:
     sf.write(f.name, y.astype(np.float32), sr); return f.name
 
 def normalize_peak(x: np.ndarray, peak: float = 0.97) -> np.ndarray:
-    m=float(np.max(np.abs(x)) or 0.0); 
+    m=float(np.max(np.abs(x)) or 0.0);
     return x if m<1e-9 else (x/m*peak).astype(np.float32)
 
 
@@ -304,6 +304,82 @@ def _resolve_files(uploaded, fallback):
         return paths
     paths = _normalize_path_list(fallback)
     return paths if paths else None
+
+# Robust same-file checker to guard duplicate IR application
+def _same_file(a: str | None, b: str | None) -> bool:
+    import os, hashlib
+    try:
+        if not a or not b:
+            return False
+        if os.path.exists(a) and os.path.exists(b):
+            try:
+                if os.path.samefile(a, b):
+                    return True
+            except Exception:
+                pass
+            def _canon(p):
+                return os.path.normcase(os.path.normpath(os.path.realpath(p)))
+            if _canon(a) == _canon(b):
+                return True
+            try:
+                sa, sb = os.path.getsize(a), os.path.getsize(b)
+                if sa == sb and sa <= 10*1024*1024:
+                    h = hashlib.sha1
+                    def _h(p):
+                        with open(p, 'rb') as f:
+                            return h(f.read()).hexdigest()
+                    if _h(a) == _h(b):
+                        return True
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return False
+
+# Decode any audio (ogg/wav/mp3/...) to float32 mono via ffmpeg; fallback to soundfile
+def _decode_any_to_float32(path: str, sr: int = SR) -> np.ndarray:
+    import os as _os, tempfile as _tmp
+    if not path or not _os.path.exists(path):
+        return np.zeros(0, dtype=np.float32)
+    try:
+        lower = path.lower()
+        if lower.endswith('.ogg') and _os.system('which ffmpeg > /dev/null 2>&1') == 0:
+            # Convert to a temp WAV, then decode normally
+            tmp_wav = _tmp.NamedTemporaryFile(prefix='vlab_bg_', suffix='.wav', delete=False).name
+            rc = _os.system(f'ffmpeg -hide_banner -loglevel error -y -i "{path}" -ac 1 -ar {sr} "{tmp_wav}"')
+            if rc == 0 and _os.path.exists(tmp_wav):
+                try:
+                    with sf.SoundFile(tmp_wav, "r") as f:
+                        data = f.read(always_2d=False, dtype="float32")
+                        if f.channels > 1 and data.ndim == 2:
+                            data = np.mean(data, axis=1)
+                        return np.asarray(data, dtype=np.float32)
+                finally:
+                    try:
+                        _os.remove(tmp_wav)
+                    except Exception:
+                        pass
+        # Generic ffmpeg pipe for other formats
+        cmd = f'ffmpeg -hide_banner -loglevel error -i "{path}" -f f32le -ac 1 -ar {sr} -'
+        with _os.popen(cmd, "rb") as f:
+            raw = f.read()
+        x = np.frombuffer(raw, dtype=np.float32)
+        if x.size > 0:
+            return x.astype(np.float32, copy=False)
+    except Exception:
+        pass
+    # Fallback: try libsoundfile directly
+    try:
+        with sf.SoundFile(path, "r") as f:
+            data = f.read(always_2d=False, dtype="float32")
+            if f.channels > 1 and data.ndim == 2:
+                data = np.mean(data, axis=1)
+            if f.samplerate != sr:
+                data = _mono_sr(data, f.samplerate, sr)
+            return np.asarray(data, dtype=np.float32)
+    except Exception:
+        return np.zeros(0, dtype=np.float32)
+
 
 
 BACKGROUND_POOL = [
@@ -474,8 +550,24 @@ def convolve_ir(x: np.ndarray, ir_path: Optional[str], mix_percent: float = 0.0)
     ir,sr=_load_audio(ir_path); ir=_mono_sr(ir,sr,SR)
     if len(ir)<8: return x
     ir=ir/(np.max(np.abs(ir))+1e-9)
-    wet=fftconvolve(x, ir, mode="same").astype(np.float32)
+    # Use mode="full" and trim to prevent time-shift/echo
+    wet=fftconvolve(x, ir, mode="full")[:len(x)].astype(np.float32)
     return (x + mix * (wet - x)).astype(np.float32)
+
+def _bg_random_start(bed: np.ndarray, target_len: int) -> np.ndarray:
+    """Randomize background start point for uniqueness, then tile/trim to target length."""
+    if len(bed) == 0:
+        return bed
+    # Pick random start position
+    start = random.randint(0, len(bed) - 1)
+    # Rotate: concatenate from start to end, then beginning to start
+    rotated = np.concatenate([bed[start:], bed[:start]])
+    # Tile if needed
+    if len(rotated) < target_len:
+        reps = int(np.ceil(target_len / len(rotated)))
+        rotated = np.tile(rotated, reps)
+    # Trim to exact length
+    return rotated[:target_len]
 
 def stream_background(y: np.ndarray,
                       bg_path: Optional[str],
@@ -485,29 +577,26 @@ def stream_background(y: np.ndarray,
                       bg_hpf: float, bg_lpf: float,
                       duck_db: float,
                       block_s: float = 10.0) -> np.ndarray:
-    if not bg_path or not os.path.exists(bg_path): return y
-    total=len(y); out=np.copy(y); env=env_follow(y)
-    duck_lin=10**(float(duck_db)/20.0); g_bg=10**(float(bg_gain_db)/20.0)
-    try:
-        with sf.SoundFile(bg_path,"r") as f:
-            src_sr=f.samplerate; pos=0; block=int(block_s*SR)
-            while pos<total:
-                need=min(block,total-pos); src_need=int(np.ceil(need*src_sr/SR))
-                data=f.read(src_need,dtype="float32",always_2d=False)
-                if len(data)==0: f.seek(0); continue
-                data=_mono_sr(data,src_sr,SR)[:need]
-                if bg_ir_path:
-                    data = convolve_ir(data, bg_ir_path, bg_ir_gain_db)
-                # Pad headroom, zero-phase filter, then soft-clip to catch intersample peaks
-                data *= 0.85
-                data = hpf_lpf(data, bg_hpf, bg_lpf, zero_phase=True)
-                data = _soft_clip(data, drive=1.0)
-                g_duck=duck_lin+(1.0-duck_lin)*(1.0-env[pos:pos+len(data)])
-                out[pos:pos+len(data)] += g_bg*data*g_duck
-                pos+=len(data)
-        return out.astype(np.float32)
-    except Exception:
+    if not bg_path:
         return y
+    bed = _decode_any_to_float32(bg_path, SR)
+    if bed.size == 0:
+        return y
+    # Randomize start point, then loop/tile to length
+    bed = _bg_random_start(bed, len(y))
+    # Background IR on bed
+    if bg_ir_path:
+        bed = convolve_ir(bed, bg_ir_path, float(bg_ir_gain_db))
+    # Pad headroom, zero-phase filter, soft clip
+    bed *= 0.85
+    bed = hpf_lpf(bed, bg_hpf, bg_lpf, zero_phase=True)
+    bed = _soft_clip(bed, drive=1.0)
+    # Ducking envelope
+    env = env_follow(y)
+    duck_lin = 10**(float(duck_db)/20.0)
+    g_bg = 10**(float(bg_gain_db)/20.0)
+    g_duck = duck_lin + (1.0 - duck_lin) * (1.0 - env)
+    return (y + g_bg * bed * g_duck).astype(np.float32)
 
 # ───────────────── one-knob leveler ─────────────────
 def leveler(x: np.ndarray, amount: float) -> np.ndarray:
@@ -678,7 +767,7 @@ def apply_phone_quality_tier(y: np.ndarray, tier: str, custom_params: dict = Non
             "description": "HD Voice/High-Quality VoIP"
         },
         "ultra_high": {
-            "bandwidth": (20, 20000),     # Near-source quality - full spectrum
+            "bandwidth": (20, SR/2),     # Full bandwidth up to Nyquist
             "sample_rate_factor": 1.0,     # Full 48kHz - no downsampling
             "bitrate_sim": 128,            # Very high bitrate
             "mu_law_intensity": 0.0,       # No compression artifacts
@@ -699,7 +788,7 @@ def apply_phone_quality_tier(y: np.ndarray, tier: str, custom_params: dict = Non
 
     # Apply bandwidth filtering
     low_freq, high_freq = params["bandwidth"]
-    y = hpf_lpf(y, float(low_freq), float(high_freq))
+    y = hpf_lpf(y, float(low_freq), float(high_freq), zero_phase=(tier in ("high","ultra_high")))
 
     # Apply sample rate simulation (downsample/upsample for artifacts)
     if params["sample_rate_factor"] < 1.0:
@@ -715,8 +804,8 @@ def apply_phone_quality_tier(y: np.ndarray, tier: str, custom_params: dict = Non
         # Band-limited μ-law for authentic landline character
         cfg = {
             "good_landline": (0.20, 300.0, 2400.0, 0.70),
-            "bad_landline":  (0.30, 300.0, 2200.0, 0.65),
-            "cordless":      (0.15, 300.0, 2600.0, 0.75),
+            "bad_landline":  (0.35, 300.0, 2400.0, 0.65),
+            "cordless":      (0.35, 300.0, 2400.0, 0.75),
         }[tier]
         mu_amt, lo, hi, drive = cfg
         vband = _zphf(y, hpf_hz=lo, lpf_hz=hi, sr=SR)
@@ -1234,7 +1323,12 @@ def process_audio(
         y = leveler(y, float(leveler_amt))
 
     # 2) Room IR (pre-codec)
-    y = convolve_ir(y, _safe_file(room_ir_file), float(room_ir_gain_db))  # room_ir_gain_db now represents mix %
+    _room_ir = _safe_file(room_ir_file)
+    _bg_ir_for_guard = _safe_file(bg_ir_file)
+    same_ir = _same_file(_room_ir, _bg_ir_for_guard)
+    _room_ir_apply = None if same_ir else _room_ir
+    ir_guard_note = " · IR:BG only" if same_ir else ""
+    y = convolve_ir(y, _room_ir_apply, float(room_ir_gain_db))  # room_ir_gain_db now represents mix %
 
     # 3) Events BEFORE phone coloration (so they get processed through phone chain too)
     xlen=len(y)
@@ -1248,6 +1342,12 @@ def process_audio(
     # 4) Background bed (with Background IR and its own filters + ducking)
     bg_candidates = _coerce_paths_list(bg_file)
     selected_bg = random.choice(bg_candidates) if bg_candidates else None
+    if selected_bg and os.path.exists(selected_bg):
+        bg_desc = os.path.basename(selected_bg)
+    elif bg_candidates:
+        bg_desc = f"random from {len(bg_candidates)} files"
+    else:
+        bg_desc = "none"
     y = stream_background(y, _safe_file(selected_bg), _safe_file(bg_ir_file),
                           float(bg_ir_gain_db), float(bg_gain_db),
                           float(bg_hpf), float(bg_lpf), float(bg_duck_db))
@@ -1381,7 +1481,8 @@ def process_audio(
         y = _soft_clip(y, drive=1.1)
 
     # 7) Handset IR (post)
-    y = convolve_ir(y, _safe_file(handset_ir_file), float(handset_ir_gain_db))
+    if quality_tier not in ("high", "ultra_high"):
+        y = convolve_ir(y, _safe_file(handset_ir_file), float(handset_ir_gain_db))
 
     # 8) Final normalization
     if normalize_output:
@@ -1391,7 +1492,11 @@ def process_audio(
         y = normalize_peak(y, 0.97)
         norm_note = ""
 
-    return _save_wav_tmp(y), f"OK · Codec: {codec_status}{wpe_note}{norm_note}"
+    # Status with preset visibility of files used
+    room_ir_name = os.path.basename(_room_ir) if _room_ir else "none"
+    bg_name = bg_desc if 'bg_desc' in locals() else "none"
+    status = f"OK · Codec: {codec_status}{wpe_note} · BG:{bg_name} · IR:{room_ir_name}{ir_guard_note}{norm_note}"
+    return _save_wav_tmp(y), status
 
 
 def process_bojan_preset(mic_file, preset_name: str, normalize_override: Optional[bool] = None):
@@ -1402,6 +1507,9 @@ def process_bojan_preset(mic_file, preset_name: str, normalize_override: Optiona
 
     cfg = dict(BOJAN_PRESET_DEFAULTS)
     cfg.update(preset)
+
+    # Preset Clean-up: ensure defaults provide no hidden IR/BG; keep explicit preset values intact
+    # (BOJAN_PRESET_DEFAULTS already sets IR/BG fields to None.)
     if normalize_override is not None:
         cfg["normalize_output"] = bool(normalize_override)
 

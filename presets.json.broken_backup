@@ -1,0 +1,337 @@
+{
+  "presets": {
+    "Untitled": {
+      "dereverb": 0.35,
+      "src_hpf": 0,
+      "src_lpf": 20000,
+      "leveler_amt": 0.6,
+      "room_ir_gain": 0,
+      "bg_ir_gain": 0,
+      "bg_gain": -14,
+      "bg_hpf": 0,
+      "bg_lpf": 1800,
+      "bg_duck": -12,
+      "bandwidth": "Narrowband 300\u20133500",
+      "opus_br": 12,
+      "post_mu": 0,
+      "plc_ms": 60,
+      "dropout_prob": 0.17,
+      "dropout_depth": -24,
+      "garble_p": 0.82,
+      "stutter_a": 0,
+      "robot_a": 0,
+      "mp3_a": 0,
+      "rf_a": 0,
+      "handset_ir_gain": 0,
+      "traf_ev": 4,
+      "traf_vol": -6,
+      "baby_ev": 3,
+      "baby_vol": -8,
+      "dog_ev": 3,
+      "dog_vol": -8
+    }
+  },
+  "controls": [
+    {
+      "type": "slider",
+      "label": "Effect Mix",
+      "path": "mix.dry_wet",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "value": 0.85
+    },
+    {
+      "type": "slider",
+      "label": "Dereverb Strength",
+      "path": "dereverb.strength",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.05,
+      "value": 1.0
+    },
+    {
+      "type": "checkbox",
+      "label": "Enable IR",
+      "path": "ir.enabled",
+      "value": false
+    },
+    {
+      "type": "slider",
+      "label": "IR Wet",
+      "path": "ir.wet",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.05,
+      "value": 0.3
+    },
+    {
+      "type": "slider",
+      "label": "Ambience Level (dB)",
+      "path": "bg.gain_db",
+      "min": -60.0,
+      "max": -8.0,
+      "step": 0.5,
+      "value": -15.0,
+      "visible_in": [
+        "Street Sounds"
+      ]
+    },
+    {
+      "type": "slider",
+      "label": "Ducking (dB)",
+      "path": "bg.duck_db",
+      "min": -30.0,
+      "max": 0.0,
+      "step": 0.5,
+      "value": -14.0,
+      "visible_in": [
+        "Street Sounds"
+      ]
+    },
+    {
+      "type": "slider",
+      "label": "BG Low-pass (Hz)",
+      "path": "bg.lpf_hz",
+      "min": 1000.0,
+      "max": 8000.0,
+      "step": 50.0,
+      "value": 4800.0,
+      "visible_in": [
+        "Street Sounds"
+      ]
+    },
+    {
+      "type": "slider",
+      "label": "BG High-pass (Hz)",
+      "path": "bg.hpf_hz",
+      "min": 20.0,
+      "max": 600.0,
+      "step": 10.0,
+      "value": 160.0,
+      "visible_in": [
+        "Street Sounds"
+      ]
+    },
+    {
+      "type": "slider",
+      "label": "Static Level",
+      "path": "overlays.static_vol",
+      "min": 0.0,
+      "max": 0.2,
+      "step": 0.005,
+      "value": 0.06
+    },
+    {
+      "type": "slider",
+      "label": "Rumble Level",
+      "path": "overlays.rumble_vol",
+      "min": 0.0,
+      "max": 0.2,
+      "step": 0.005,
+      "value": 0.05
+    },
+    {
+      "type": "slider",
+      "label": "Jitter",
+      "path": "network.jitter_strength",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "value": 0.35
+    },
+    {
+      "type": "slider",
+      "label": "Dropouts / min",
+      "path": "dropouts.rate_per_min",
+      "min": 0.0,
+      "max": 40.0,
+      "step": 0.1,
+      "value": 12.0
+    },
+    {
+      "type": "slider",
+      "label": "Dropout Length (ms)",
+      "path": "dropouts.avg_ms",
+      "min": 50.0,
+      "max": 400.0,
+      "step": 5.0,
+      "value": 190.0
+    },
+    {
+      "type": "slider",
+      "label": "Dropout Jitter (\u00b1ms)",
+      "path": "dropouts.jitter_ms",
+      "min": 0.0,
+      "max": 200.0,
+      "step": 5.0,
+      "value": 80.0
+    },
+    {
+      "type": "slider",
+      "label": "Dropout Depth (dB)",
+      "path": "dropouts.depth_db",
+      "min": -60.0,
+      "max": -5.0,
+      "step": 1.0,
+      "value": -32.0
+    },
+    {
+      "type": "dropdown",
+      "label": "Garble Mode",
+      "path": "artifacts.garble_mode",
+      "choices": [
+        "mix",
+        "quantize",
+        "notch",
+        "warp"
+      ],
+      "value": "mix"
+    },
+    {
+      "type": "slider",
+      "label": "Garble Probability",
+      "path": "artifacts.garble_prob",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "value": 0.55
+    },
+    {
+      "type": "slider",
+      "label": "Garble Strength",
+      "path": "artifacts.garble_strength",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "value": 0.9
+    },
+    {
+      "type": "slider",
+      "label": "Stutter events/min",
+      "path": "stutter.events_min",
+      "min": 0.0,
+      "max": 40.0,
+      "step": 0.5,
+      "value": 8.0
+    },
+    {
+      "type": "slider",
+      "label": "Stutter Amount",
+      "path": "stutter.amount",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "value": 0.65
+    },
+    {
+      "type": "slider",
+      "label": "Robotize events/min",
+      "path": "robot.events_min",
+      "min": 0.0,
+      "max": 25.0,
+      "step": 0.5,
+      "value": 5.0
+    },
+    {
+      "type": "slider",
+      "label": "Robotize Amount",
+      "path": "robot.amount",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "value": 0.5
+    },
+    {
+      "type": "slider",
+      "label": "Warp events/min",
+      "path": "warp.events_min",
+      "min": 0.0,
+      "max": 40.0,
+      "step": 0.5,
+      "value": 10.0
+    },
+    {
+      "type": "slider",
+      "label": "Warp Amount",
+      "path": "warp.amount",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "value": 0.65
+    },
+    {
+      "type": "slider",
+      "label": "Compand Knee (dB)",
+      "path": "tone.knee_db",
+      "min": 0.0,
+      "max": 18.0,
+      "step": 1.0,
+      "value": 5.0
+    },
+    {
+      "type": "slider",
+      "label": "Compand Ratio",
+      "path": "tone.ratio",
+      "min": 1.0,
+      "max": 10.0,
+      "step": 0.1,
+      "value": 3.2
+    },
+    {
+      "type": "slider",
+      "label": "Makeup (dB)",
+      "path": "tone.makeup_db",
+      "min": 0.0,
+      "max": 6.0,
+      "step": 0.1,
+      "value": 0.6
+    },
+    {
+      "type": "slider",
+      "label": "Softclip",
+      "path": "tone.softclip",
+      "min": 0.0,
+      "max": 0.3,
+      "step": 0.01,
+      "value": 0.12
+    },
+    {
+      "type": "slider",
+      "label": "Phone Low Hz",
+      "path": "phone.low_hz",
+      "min": 50.0,
+      "max": 600.0,
+      "step": 10.0,
+      "value": 280.0
+    },
+    {
+      "type": "slider",
+      "label": "Phone High Hz",
+      "path": "phone.high_hz",
+      "min": 2500.0,
+      "max": 4000.0,
+      "step": 50.0,
+      "value": 3400.0
+    },
+    {
+      "type": "slider",
+      "label": "Bitrate (kbps)",
+      "path": "phone.bitrate_kbps",
+      "min": 0.0,
+      "max": 32.0,
+      "step": 0.5,
+      "value": 6.0
+    },
+    {
+      "type": "slider",
+      "label": "Codec Intensity",
+      "path": "phone.codec_intensity",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "value": 0.65
+    }
+  ],
+  "schema": 1
+}

@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+*.zip
+VoiceLabFX_ForBojan_20251001/
+VoiceLabFX_API_ForBojan/
+voicelabfx/
+versions/
+temp_*
+tmp_*

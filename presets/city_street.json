@@ -1,0 +1,9 @@
+{
+  "name": "city_street",
+  "eq": {
+    "low": 250,
+    "high": 4000
+  },
+  "ambience": "city_ambience_loop.wav",
+  "output_sr": 44100
+}

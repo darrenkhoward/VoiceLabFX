@@ -1,0 +1,194 @@
+its been ten minues whats up
+
+diff --git a/app.py b/app.py index b212a2e..e9c3c2e 100644 --- a/app.py +++ b/app.py @@ -35,7 +35,8 @@ PROCESS_AUDIO_PARAM_ORDER = [ "traffic_files", "traffic_ev_min", "traffic_vol_db", "baby_files", "baby_ev_min", "baby_vol_db", "dog_files", "dog_ev_min", "dog_vol_db",
+	•	"speed_mode", "normalize_output" ]
+@@ -77,6 +78,7 @@ BOJAN_PRESET_DEFAULTS: Dict[str, Any] = { "baby_vol_db": -12.0, "dog_files": None, "dog_ev_min": 0.0,
+	•	"speed_mode": False, "dog_vol_db": -12.0, "normalize_output": True, } @@ -103,6 +105,7 @@ BOJAN_PRESET_CONFIGS: Dict[str, Dict[str, Any]] = { ], "traffic_ev_min": 10.0, "traffic_vol_db": -4.0,
+	•	   "speed_mode": False,
+	•	   "normalize_output": True,
+	•	  }, "📶 Spotty Service": { @@ -126,6 +129,7 @@ BOJAN_PRESET_CONFIGS: Dict[str, Dict[str, Any]] = { "traffic_files": [ "assets/car horns/569613__wanaki__car-horn-irritated-driver-stuck-in-traffic.mp3" ],
+	•	   "speed_mode": False,
+	•	   "traffic_ev_min": 6.0,
+	•	   "traffic_vol_db": -8.0,
+	•	   "normalize_output": True,
+	•	 
+@@ -152,6 +156,7 @@ BOJAN_PRESET_CONFIGS: Dict[str, Dict[str, Any]] = { "assets/Party Music/Hip Hop 2_48k.ogg" ], "bg_gain_db": -32.0,
+	•	   "speed_mode": False,
+	•	   "bg_hpf": 100.0,
+	•	   "bg_lpf": 900.0,
+	•	   "dropout_prob": 0.04,
+	•	 
+@@ -185,6 +190,7 @@ BOJAN_PRESET_CONFIGS: Dict[str, Dict[str, Any]] = { "assets/Party Music/techno 2_48k.ogg" ], "bg_gain_db": -24.0,
+	•	   "speed_mode": False,
+	•	   "bg_hpf": 60.0,
+	•	   "bg_lpf": 850.0,
+	•	   "bg_duck_db": -20.0,
+	•	 
+@@ -280,6 +286,7 @@ def _normalize_path_list(value) -> list[str]: parts=[line.strip() for line in value.replace(';', '\n').splitlines() if line.strip()] return parts return _coerce_paths_list(value) +
+def _resolve_file(uploaded, fallback): upload_path = _safe_file(uploaded) @@ -478,8 +485,9 @@ def stream_background(y: np.ndarray, bg_ir_path: Optional[str], bg_ir_gain_db: float, bg_gain_db: float,
+	•	                 bg_hpf: float, bg_lpf: float,
+	•	 
+	•	                 duck_db: float,
+	•	 
+	•	                 bg_hpf: float, bg_lpf: float,
+	•	 
+	•	                 duck_db: float,
+	•	 
+	•	                 speed_mode: bool = False,
+	•	                 block_s: float = 10.0) -> np.ndarray:
+	•	  if not bg_path or not os.path.exists(bg_path): return y total=len(y); out=np.copy(y); env=env_follow(y) @@ -495,11 +503,11 @@ def stream_background(y: np.ndarray, need=min(block,total-pos); src_need=int(np.ceil(need*src_sr/SR)) data=f.read(src_need,dtype="float32",always_2d=False) if len(data)==0: f.seek(0); continue
+	•	           data=_mono_sr(data,src_sr,SR)[:need]
+	•	 
+	•	           if bg_ir_path:
+	•	 
+	•	           data=_mono_sr(data,src_sr,SR)[:need]
+	•	 
+	•	           if bg_ir_path and not speed_mode:
+	•	               data = convolve_ir(data, bg_ir_path, bg_ir_gain_db)
+	•	           # Pad headroom, zero-phase filter, then soft-clip to catch intersample peaks
+	•	           data *= 0.85
+	•	 
+	•	           data = hpf_lpf(data, bg_hpf, bg_lpf, zero_phase=True)
+	•	 
+	•	           data = hpf_lpf(data, bg_hpf, bg_lpf, zero_phase=not speed_mode)
+	•	           data = _soft_clip(data, drive=1.0)
+	•	           g_duck=duck_lin+(1.0-duck_lin)*(1.0-env[pos:pos+len(data)])
+	•	           out[pos:pos+len(data)] += g_bg*data*g_duck
+	•	 
+@@ -1408,7 +1416,8 @@ def process_audio( traffic_files, traffic_ev_min, traffic_vol_db, baby_files, baby_ev_min, baby_vol_db, dog_files, dog_ev_min, dog_vol_db,
+	•	speed_mode, normalize_output ):input
+@@ -1417,6 +1426,7 @@ def process_audio( y,sr=_load_audio(mic_path); y=_mono_sr(y,sr,SR) if len(y)<int(0.05SR): return None,"Input too short." if len(y)>3060*SR: return None,"Input too long (>30m)."
+	•	speed_mode = bool(speed_mode) 1) Source cleanup modern = quality_tier in ("high", "ultra_high") @@ -1443,6 +1453,8 @@ def process_audio( user_requested_cleanup = (wpe_strength > 0.0) or (dereverb_amt > 0.0) cleanup_allowed = (not modern) or user_requested_cleanup
+	•	if speed_mode:
+	•	   cleanup_allowed = False
+	•	  y_base = y.astype(np.float32, copy=True) wpe_note = "" @@ -1484,11 +1496,11 @@ def process_audio( 4) Background bed (with Background IR and its own filters + ducking) bg_candidates = _coerce_paths_list(bg_file) selected_bg = random.choice(bg_candidates) if bg_candidates else None y = stream_background(y, _safe_file(selected_bg), _safe_file(bg_ir_file), float(bg_ir_gain_db), float(bg_gain_db),
+	•	                     float(bg_hpf), float(bg_lpf), float(bg_duck_db))
+	•	 
+	•	                     float(bg_hpf), float(bg_lpf), float(bg_duck_db), speed_mode=speed_mode)
+	•	  Pre-limit the combined remote mix so μ-law/codec can't splatter peak = float(np.max(np.abs(y)) or 1.0) if peak > 0.707: # ~ -3 dBFS y = (y * (0.707 / peak)).astype(np.float32) @@ -1526,6 +1538,8 @@ def process_audio( 6) Network artifacts with quality-aware scaling Skip digital artifacts for landline tiers (they have analog-specific issues instead) skip_digital_artifacts = quality_tier in ["good_landline", "bad_landline", "cordless"]
+	•	if speed_mode and quality_tier in ["high", "ultra_high"]:
+	•	   skip_digital_artifacts = True
+	•	  if not skip_digital_artifacts: # Get quality multipliers for artifacts @@ -1589,7 +1603,8 @@ def process_audio( else: y = normalize_peak(y, 0.97) norm_note = ""
+	•	return _save_wav_tmp(y), f"OK · Codec: {codec_status}{wpe_note}{norm_note}"
+	•	speed_note = " · Speed" if speed_mode else ""
+	•	return _save_wav_tmp(y), f"OK · Codec: {codec_status}{wpe_note}{speed_note}{norm_note}"
+def process_bojan_preset(mic_file, preset_name: str, normalize_override: Optional[bool] = None): @@ -1613,7 +1628,8 @@ def process_bojan_preset(mic_file, preset_name: str, normalize_override: Optiona mic_file, *args ) @@ -1626,7 +1642,8 @@ def process_editor_request( traffic_files, traffic_ev_min, traffic_vol_db, baby_files, baby_ev_min, baby_vol_db, dog_files, dog_ev_min, dog_vol_db,
+	•	speed_mode, normalize_output ): room_ir_final = _resolve_file(room_ir_upload, room_ir_path) @@ -1651,6 +1668,7 @@ def process_editor_request( traffic_files, traffic_ev_min, traffic_vol_db, baby_files, baby_ev_min, baby_vol_db, dog_files, dog_ev_min, dog_vol_db,
+	•	   speed_mode,
+	•	   normalize_output
+	•	  )
+@@ -1709,6 +1727,7 @@ def load_presets() -> Dict[str, Any]: "garble_intensity": 0.0, "stutter_amt": 0.0, "jitter_intensity": 0.0, "reorder_prob": 0.0, "handset_ir_file": None, "handset_ir_gain_db": -6, "target_lufs": -18 },
+	•	           "speed_mode": False,
+	•	           "📱 Modern Cellular": {
+	•	               "dereverb": 1.2, "src_hpf": 50, "src_lpf": 12000, "leveler_amt": 0.6, "wpe_strength": 0.2, "cleanup_mix": 1.0,
+	•	               "room_ir_file": None, "room_ir_gain_db": 0, "quality_tier": "high",
+	•	 
+@@ -1717,6 +1736,7 @@ def load_presets() -> Dict[str, Any]: "garble_intensity": 0.01, "stutter_amt": 0.0, "jitter_intensity": 0.005, "reorder_prob": 0.0, "handset_ir_file": None, "handset_ir_gain_db": -8, "target_lufs": -18 },
+	•	           "speed_mode": False,
+	•	           "🎧 Premium VoIP": {
+	•	               "dereverb": 0.8, "src_hpf": 20, "src_lpf": 20000, "leveler_amt": 0.5, "wpe_strength": 0.1, "cleanup_mix": 1.0,
+	•	               "room_ir_file": None, "room_ir_gain_db": 0, "quality_tier": "ultra_high",
+	•	 
+@@ -1725,6 +1745,7 @@ def load_presets() -> Dict[str, Any]: "garble_intensity": 0.0, "stutter_amt": 0.0, "jitter_intensity": 0.0, "reorder_prob": 0.0, "handset_ir_file": None, "handset_ir_gain_db": -10, "target_lufs": -18 },
+	•	           "speed_mode": False,
+	•	           "🚦 Street Caller": {
+	•	               "dereverb": 0.25, "src_hpf": 80, "src_lpf": 17000, "leveler_amt": 0.45, "wpe_strength": 0.0, "cleanup_mix": 1.0,
+	•	               "room_ir_file": None, "room_ir_gain_db": 0, "quality_tier": "low",
+	•	 
+@@ -1737,6 +1758,7 @@ def load_presets() -> Dict[str, Any]: "traffic_files": list(HORN_POOL), "traffic_ev_min": 10, "traffic_vol_db": -4, "baby_files": list(BABY_POOL), "baby_ev_min": 0,
+	•	               "speed_mode": False,
+	•	               "dog_files": list(DOG_POOL), "dog_ev_min": 0,
+	•	               "car_files": list(CAR_POOL)
+	•	           },
+	•	 
+@@ -1748,6 +1770,7 @@ def load_presets() -> Dict[str, Any]: "garble_intensity": 0.32, "stutter_amt": 0.045, "jitter_intensity": 0.18, "reorder_prob": 0.08, "handset_ir_file": "assets/irs/cellphone_dry_trimmed.wav", "handset_ir_gain_db": -9, "target_lufs": -20, "traffic_files": list(HORN_POOL),
+	•	               "speed_mode": False,
+	•	               "traffic_ev_min": 6, "traffic_vol_db": -8,
+	•	               "baby_files": list(BABY_POOL), "baby_ev_min": 0,
+	•	               "dog_files": list(DOG_POOL), "dog_ev_min": 0,
+	•	 
+@@ -1760,6 +1783,7 @@ def load_presets() -> Dict[str, Any]: "assets/Party Music/Hip Hop 2_48k.ogg" ], "bg_gain_db": -32, "bg_hpf": 100, "bg_lpf": 900, "bg_duck_db": -18, "bg_ir_file": None, "bg_ir_gain_db": 0, "rf_a": 0.02, "dropout_prob": 0.04, "plc_ms": 40, "dropout_depth_db": -26,
+	•	               "speed_mode": False,
+	•	               "garble_intensity": 0.04, "stutter_amt": 0.01, "jitter_intensity": 0.02, "reorder_prob": 0.01,
+	•	               "handset_ir_file": "assets/irs/cellphone_dry_trimmed.wav", "handset_ir_gain_db": -5, "target_lufs": -18,
+	•	               "traffic_files": ["assets/car horns/733168__locky_y__honking.mp3"],
+	•	 
+@@ -1777,6 +1801,7 @@ def load_presets() -> Dict[str, Any]: "assets/Party Music/techno 2_48k.ogg" ], "bg_gain_db": -24, "bg_hpf": 60, "bg_lpf": 850, "bg_duck_db": -20, "bg_ir_file": None, "bg_ir_gain_db": 0, "rf_a": 0.05, "dropout_prob": 0.05, "plc_ms": 38, "dropout_depth_db": -24,
+	•	               "speed_mode": False,
+	•	               "garble_intensity": 0.05, "stutter_amt": 0.012, "jitter_intensity": 0.03, "reorder_prob": 0.015,
+	•	               "handset_ir_file": "assets/irs/cellphone_dry_trimmed.wav", "handset_ir_gain_db": -5, "target_lufs": -18,
+	•	               "traffic_files": ["assets/car horns/425848__soundholder__renault-master-f3500-dci135-foley-horn-outside-mono.mp3"],
+	•	 
+@@ -1792,6 +1817,7 @@ def load_presets() -> Dict[str, Any]: "rf_a": 0.0, "dropout_prob": 0.0, "plc_ms": 0, "dropout_depth_db": -60, "garble_intensity": 0.0, "stutter_amt": 0.0, "jitter_intensity": 0.0, "reorder_prob": 0.0, "handset_ir_file": None, "handset_ir_gain_db": 0, "target_lufs": -18
+	•	           "speed_mode": False,
+	•	           }
+	•	       }
+	•	   }
+	•	 
+@@ -1653,6 +1683,7 @@ def create_app(): with gr.Tab("Output"):
+	•	       speed_mode = gr.Checkbox(False, label="⚡ Speed Mode", info="Bypass cleanup/background IR for low-latency preview on modern tiers")
+	•	       normalize_output = gr.Checkbox(False, label="Normalize Output", info="Normalize all processed audio to consistent level (-18 LUFS for radio broadcast)")
+	•	
+	•	   with gr.Tab("SFX Generators"):
+	•	 
+@@ -1712,7 +1743,8 @@ def create_app(): traf_files, traf_ev, traf_vol, baby_files, baby_ev, baby_vol, dog_files, dog_ev, dog_vol,
+	•	           speed_mode,
+	•	           normalize_output
+	•	       ],
+	•	       outputs=[out, status]
+	•	 
+@@ -1727,6 +1759,7 @@ def create_app(): "traf_ev","traf_vol","baby_ev","baby_vol","dog_ev","dog_vol",
+	•	           "speed_mode",
+	•	           "normalize_output"
+	•	       ]
+	•	       cfg = dict(zip(keys, vals))
+	•	 
+@@ -1770,6 +1803,7 @@ def create_app(): gr.update(value=v("baby_ev",3.0)), gr.update(value=v("baby_vol",-8.0)), gr.update(value=v("dog_ev",3.0)), gr.update(value=v("dog_vol",-8.0)),
+	•	           gr.update(value=v("speed_mode",False)),
+	•	           gr.update(value=v("normalize_output",False))
+	•	       )
+	•	   preset_dd.change(on_choose, inputs=[prs_state, preset_dd],
+	•	 
+@@ -1778,7 +1812,8 @@ def create_app(): garble_p, stutter_a, jitter_a, buffer_p, reorder_p, codec_type, codec_intensity, mic_proximity, mic_type, mp3_a, rf_a, handset_ir_path, handset_ir_gain, traf_ev, traf_vol, baby_ev, baby_vol, dog_ev, dog_vol,
+	•	                             speed_mode,
+	•	                             normalize_output])
+	•	  return demo
+can you see the previous chat here
+
+I only have this conversation—anything from other chats isn’t visible to me here.
+its in the folder "vs chat gpt5 codex 9/28/25"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+vs chat gpt5 codex 9:28:25.txt
+
+
+Found it in vs chat gpt5 codex 9:28:25.txt (≈1.8k lines) right in the repo root. The opening section walks through the 48 kHz fixes, low-end filtering, and preset tweaks for ultra_high quality. Let me know if you want anything specific pulled from it.
+did you read it all? i only switched to a new chat because it was failing
+
+
+
+Not yet—it’s ~1.8K lines, so I’ve only skimmed the opening section to confirm it’s the same chat you mentioned. I can finish reading or pull out specific parts if you tell me what you need from it.
+read it all i nee dyou to have full context
+
+Yes—finished reading the full vs chat gpt5 codex 9:28:25.txt transcript end to end, so I’m up to speed on everything captured there.
+ok where did we leave off
+
+You asked me to add the ⚡ Speed Mode toggle so high/ultra tiers can bypass cleanup/background IR/artifacts. I’ve already read through the full prior transcript, so I’m caught up on all context and ready to continue from that task.

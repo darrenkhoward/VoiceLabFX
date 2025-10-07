@@ -1,0 +1,17 @@
+{
+  "name": "spotty_service",
+  "eq": {
+    "low": 300,
+    "high": 3400
+  },
+  "bitcrush": {
+    "bits": 8
+  },
+  "dropout": {
+    "interval_ms": 150,
+    "prob": 0.3,
+    "atten_db": -60
+  },
+  "ambience": "static_phone_hiss.wav",
+  "output_sr": 16000
+}

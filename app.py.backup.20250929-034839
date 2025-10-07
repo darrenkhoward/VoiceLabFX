@@ -1,0 +1,1055 @@
+# VoiceLab FX — Editor (Full, Purple UI)
+# Updates: micro Robustness, Modern tier handling, μ-law landline color, IR double-guard
+# Author: Voice Lab Initiative
+# Sample rate is fixed end-to-end at 48 kHz
+
+import os, io, atexit, tempfile, json, random, math, time, warnings
+from typing import Optional, Dict, Any, List, Tuple
+import numpy as np
+import gradio as gr
+
+from scipy.signal import butter, sosfilt, sosfiltfilt, fftconvolve, lfilter
+from scipy.io import wavfile
+
+warnings.filterwarnings("ignore", category=UserWarning)
+
+# ───────────────── constants ─────────────────
+SR = 48000
+TMP_DIR = tempfile.mkdtemp(prefix="voicelabfx_")
+
+# Global temp file tracking for cleanup
+_TEMP_FILES: List[str] = []
+
+def _tmp_path(suffix: str = ".wav") -> str:
+    p = os.path.join(TMP_DIR, f"tmp_{int(time.time()*1000)}_{random.randint(0,1_000_000)}{suffix}")
+    _TEMP_FILES.append(p)
+    return p
+
+def _save_wav_tmp(y: np.ndarray, sr: int = SR) -> str:
+    p = _tmp_path(".wav")
+    wavfile.write(p, sr, (np.clip(y, -1.0, 1.0) * 32767.0).astype(np.int16))
+    return p
+
+def _purge_temp():
+    try:
+        for f in list(_TEMP_FILES):
+            try:
+                if os.path.exists(f):
+                    os.remove(f)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+atexit.register(_purge_temp)
+
+# ───────────────── file I/O helpers ─────────────────
+def _safe_file(x) -> Optional[str]:
+    if isinstance(x, str) and x.strip() and os.path.exists(x.strip()):
+        return x.strip()
+    try:
+        # gradio file object
+        if hasattr(x, "name") and os.path.exists(x.name):
+            return x.name
+    except Exception:
+        pass
+    return None
+
+def _coerce_paths_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        out = []
+        for v in value:
+            p = _safe_file(v) or (v if isinstance(v, str) else None)
+            if p:
+                out.append(p)
+        return out
+    if isinstance(value, str):
+        # allow semicolon or newline separated
+        parts=[line.strip() for line in value.replace(';', '\n').splitlines() if line.strip()]
+        return parts
+    return _coerce_paths_list(value)
+
+def _resolve_file(uploaded, fallback):
+    upload_path = _safe_file(uploaded)
+    if upload_path:
+        return upload_path
+    fb = _safe_file(fallback) or (fallback if isinstance(fallback, str) else None)
+    return fb
+
+# ───────────────── filters and utilities ─────────────────
+def hpf_lpf(x: np.ndarray, hpf_hz: float = 0.0, lpf_hz: float = SR/2, zero_phase: bool = False) -> np.ndarray:
+    y = x.astype(np.float32, copy=False)
+    if hpf_hz and hpf_hz >= 20:
+        sos = butter(2, hpf_hz/(SR/2), btype="high", output="sos")
+        y = (sosfiltfilt(sos, y) if zero_phase else sosfilt(sos, y))
+    if lpf_hz and lpf_hz < (SR/2):
+        sos = butter(4, lpf_hz/(SR/2), btype="low", output="sos")
+        y = (sosfiltfilt(sos, y) if zero_phase else sosfilt(sos, y))
+    return y.astype(np.float32)
+
+def _soft_clip(x: np.ndarray, drive: float = 1.0) -> np.ndarray:
+    # Gentle limiter for small overshoots; drive=1 is subtle
+    return np.tanh(drive * x).astype(np.float32)
+
+def _prelimit(x: np.ndarray, threshold: float = 0.707) -> np.ndarray:
+    # Pre-limit to prevent codec splattering
+    peak = float(np.max(np.abs(x)) or 1.0)
+    if peak > threshold:
+        return (x * (threshold / peak)).astype(np.float32)
+    return x.astype(np.float32)
+
+def _zphf(x: np.ndarray, hpf_hz: float = 0.0, lpf_hz: float = SR/2, sr: int = SR) -> np.ndarray:
+    """Zero-phase filtering for band extraction"""
+    return hpf_lpf(x, hpf_hz, lpf_hz, zero_phase=True)
+
+def apply_mulaw_color(x: np.ndarray, amount: float, mu: float = 255.0, drive: float = 0.75) -> np.ndarray:
+    """Apply μ-law coloration with encode/decode cycle for realistic codec character"""
+    if amount <= 0.0:
+        return x.astype(np.float32)
+
+    x = _prelimit(x, 0.707)
+    # Encode pass
+    y = np.sign(x) * np.log1p(mu * np.abs(np.clip(x * drive, -1, 1))) / np.log1p(mu)
+    # Decode pass to make it "codec color" not harsh nonlinearity
+    y = np.sign(y) * (np.expm1(np.log1p(mu) * np.abs(y)) / mu)
+    # Parallel blend
+    out = (1.0 - amount) * x + amount * y
+    return _soft_clip(out, 1.02).astype(np.float32)
+
+def fade_window(n: int, fade: int) -> np.ndarray:
+    if fade<=0 or fade*2>=n: return np.ones(n, dtype=np.float32)
+    w=np.ones(n,dtype=np.float32); r=np.linspace(0,1,fade,dtype=np.float32)
+    w[:fade]=r; w[-fade:]=r[::-1]; return w
+
+# ───────────────── stronger dereverb ─────────────────
+# Keep original (single-pass) for easy revert if needed
+def dereverb_strong_original(y: np.ndarray, amount: float) -> np.ndarray:
+    if amount <= 0: return y.astype(np.float32)
+    try:
+        import noisereduce as nr
+        out = nr.reduce_noise(y=y, sr=SR, stationary=False, prop_decrease=float(np.clip(amount, 0, 1)))
+        return out.astype(np.float32)
+    except ImportError:
+        return y.astype(np.float32)
+
+def dereverb_strong(y: np.ndarray, amount: float) -> np.ndarray:
+    if amount <= 0: return y.astype(np.float32)
+    # A bit more assertive than original, still safe
+    try:
+        import noisereduce as nr
+        a=float(np.clip(amount,0.0,1.0))
+        y1 = nr.reduce_noise(y=y, sr=SR, stationary=False, prop_decrease=0.3*a+0.2)
+        y2 = nr.reduce_noise(y=y1, sr=SR, stationary=True,  prop_decrease=0.2*a+0.1)
+        return y2.astype(np.float32)
+    except ImportError:
+        return dereverb_strong_original(y, amount)
+
+# ───────────────── load/save ─────────────────
+def _load_audio(path: str) -> Tuple[np.ndarray, int]:
+    if not path or not os.path.exists(path):
+        return np.zeros(1, dtype=np.float32), SR
+    try:
+        sr, x = wavfile.read(path)
+        if x.dtype.kind == 'i':
+            x = x.astype(np.float32) / 32768.0
+        elif x.dtype.kind == 'f':
+            x = x.astype(np.float32)
+        else:
+            x = x.astype(np.float32)
+        return x, sr
+    except Exception:
+        # fallback via ffmpeg to handle mp3/ogg/etc
+        tmp = _tmp_path(".wav")
+        os.system(f'ffmpeg -y -hide_banner -loglevel error -i "{path}" -ar {SR} -ac 1 -f wav "{tmp}"')
+        sr, x = wavfile.read(tmp)
+        if x.dtype.kind == 'i':
+            x = x.astype(np.float32) / 32768.0
+        else:
+            x = x.astype(np.float32)
+        return x, sr
+
+def _mono_sr(x: np.ndarray, sr: int, target_sr: int = SR) -> np.ndarray:
+    if x.ndim > 1:
+        x = x.mean(axis=1).astype(np.float32)
+    if sr != target_sr:
+        # resample via ffmpeg for stable quality
+        tmp_in = _save_wav_tmp(x, sr)
+        tmp_out = _tmp_path(".wav")
+        os.system(f'ffmpeg -y -hide_banner -loglevel error -i "{tmp_in}" -ar {target_sr} -ac 1 -f wav "{tmp_out}"')
+        _, y = wavfile.read(tmp_out)
+        if y.dtype.kind == 'i':
+            y = y.astype(np.float32) / 32768.0
+        else:
+            y = y.astype(np.float32)
+        return y
+    return x.astype(np.float32)
+
+# ───────────────── IR apply ─────────────────
+def convolve_ir(x: np.ndarray, ir_path: Optional[str], mix_db_or_percent: float) -> np.ndarray:
+    """Apply IR with wet/dry mixing. mix_percent: 0=dry, 100=wet"""
+    if not ir_path or not os.path.exists(ir_path) or mix_db_or_percent <= 0: return x
+    # Interpret the slider as "mix percent" already per UI copy
+    mix = np.clip(mix_db_or_percent / 100.0, 0.0, 1.0)
+    ir,sr=_load_audio(ir_path); ir=_mono_sr(ir,sr,SR)
+    if len(ir)<8: return x
+    ir=ir/(np.max(np.abs(ir))+1e-9)
+    wet=fftconvolve(x, ir, mode="same").astype(np.float32)
+    return (x + mix * (wet - x)).astype(np.float32)
+
+def stream_background(y: np.ndarray,
+                      bg_path: Optional[str],
+                      bg_ir_path: Optional[str],
+                      bg_ir_gain_db: float,
+                      bg_gain_db: float,
+                      bg_hpf: float, bg_lpf: float,
+                      duck_db: float) -> np.ndarray:
+    """Stream-in long background with optional IR, filters, and ducking"""
+    try:
+        if not bg_path or not os.path.exists(bg_path): return y
+        total=len(y); out=np.copy(y); env=_env_follow(y)
+        # Precompute constants
+        g_bg=10.0**(float(bg_gain_db)/20.0)
+        duck_lin=10.0**(float(duck_db)/20.0) if duck_db<0 else 1.0
+        pos=0
+        # open via soundfile-like reader using ffmpeg through numpy memmap approach
+        # Simpler: loop reading chunks via ffmpeg pipe
+        src_sr = SR
+        # Use ffmpeg to get raw float32
+        cmd = f'ffmpeg -hide_banner -loglevel error -i "{bg_path}" -f f32le -ac 1 -ar {SR} -'
+        with os.popen(cmd, "rb") as f:
+            block = int(10.0*SR)  # 10 seconds
+            while pos < total:
+                need=min(block,total-pos)
+                src_need=int(np.ceil(need*src_sr/SR))
+                data=np.frombuffer(f.read(src_need*4), dtype="float32")
+                if len(data)==0:
+                    # loop background
+                    f.close()
+                    with os.popen(cmd, "rb") as f2:
+                        data=np.frombuffer(f2.read(src_need*4), dtype="float32")
+                        if len(data)==0:
+                            break
+                    f = f2  # type: ignore
+                data=data[:need].astype(np.float32, copy=False)
+
+                # Optional BG IR
+                if bg_ir_path:
+                    data = convolve_ir(data, bg_ir_path, bg_ir_gain_db)
+
+                # Headroom and zero-phase filter for clean BG tonality
+                data *= 0.85
+                data = hpf_lpf(data, bg_hpf, bg_lpf, zero_phase=True)
+                data = _soft_clip(data, drive=1.0)
+
+                # Simple duck vs env
+                g_duck=duck_lin+(1.0-duck_lin)*(1.0-env[pos:pos+len(data)])
+                out[pos:pos+len(data)] += g_bg*data*g_duck
+                pos+=len(data)
+        return out.astype(np.float32)
+    except Exception:
+        return y
+
+# ───────────────── one-knob leveler ─────────────────
+def leveler(x: np.ndarray, amount: float) -> np.ndarray:
+    a=float(np.clip(amount,0.0,1.0))
+    if a<=0: return x
+    target_rms_db = -28.0 + 12.0*a
+    atk_ms = 10.0 - 6.0*a; rel_ms = 320.0 - 200.0*a
+    atk=max(1,int(SR*atk_ms/1000.0)); rel=max(1,int(SR*rel_ms/1000.0))
+    env=np.zeros_like(x,dtype=np.float32); g=0.0; ax=np.abs(x)+1e-9
+    for i,v in enumerate(ax):
+        target = 10.0**((target_rms_db/20.0)) / (v+1e-6)
+        target = np.clip(target, 0.2, 5.0)
+        if target > g:
+            g += (target-g)/atk
+        else:
+            g += (target-g)/rel
+        env[i]=g
+    y = (x*env).astype(np.float32)
+    return _soft_clip(y, 1.05)
+
+def rms_db(x: np.ndarray) -> float:
+    return 20.0*np.log10(float(np.sqrt(np.mean(np.square(x))+1e-12))+1e-12)
+
+# ───────────────── env follower ─────────────────
+def _env_follow(x: np.ndarray, atk_ms: float = 10.0, rel_ms: float = 180.0) -> np.ndarray:
+    atk=max(1,int(SR*atk_ms/1000.0)); rel=max(1,int(SR*rel_ms/1000.0))
+    env=np.zeros_like(x,dtype=np.float32); g=0.0; ax=np.abs(x)+1e-9
+    for i,v in enumerate(ax):
+        target = v
+        if target > g:
+            g += (target-g)/atk
+        else:
+            g += (target-g)/rel
+        env[i]=np.clip(g,0.0,1.0)
+    return env
+
+# ───────────────── old artifact models for parity ─────────────────
+def apply_dropouts_old(v: np.ndarray, drop_p: float, chunk_ms: float, depth_db: float) -> np.ndarray:
+    if drop_p<=0: return v
+    w = max(8, int(chunk_ms*SR/1000.0))
+    y = v.copy()
+    for i in range(0, len(y), w):
+        if random.random() < drop_p:
+            y[i:i+w] *= 10.0**(float(depth_db)/20.0)
+    return y.astype(np.float32)
+
+def apply_stutter_old(v: np.ndarray, amount: float, sr: int = SR) -> np.ndarray:
+    if amount<=0: return v
+    w = max(16, int(0.03*sr))
+    y = v.copy()
+    for i in range(0, len(y)-w, w):
+        if random.random() < amount:
+            y[i:i+w] = np.roll(y[i:i+w], int(w*0.5))
+    return y.astype(np.float32)
+
+def apply_jitter_buffering(v: np.ndarray, jitter_intensity: float, buffer_prob: float, sr: int = SR) -> np.ndarray:
+    if jitter_intensity<=0 and buffer_prob<=0: return v
+    y=v.copy()
+    n=len(y)
+    # simple variable delay / freeze sim
+    i=0
+    while i<n-1:
+        if random.random() < buffer_prob:
+            span = min(int(0.04*sr), n-i-1)
+            if span>0:
+                y[i:i+span] = y[i]  # freeze
+                i += span
+        else:
+            i += 1+int(jitter_intensity*5)
+    return y.astype(np.float32)
+
+def apply_packet_reordering(v: np.ndarray, reorder_prob: float, sr: int = SR) -> np.ndarray:
+    if reorder_prob<=0: return v
+    y=v.copy()
+    w=max(32, int(0.02*sr))
+    chunks=[y[i:i+w] for i in range(0,len(y),w)]
+    for i in range(len(chunks)-1):
+        if random.random()<reorder_prob:
+            chunks[i],chunks[i+1]=chunks[i+1],chunks[i]
+    return np.concatenate(chunks).astype(np.float32)
+
+def apply_codec_artifacts(v: np.ndarray, codec_type: str, intensity: float, sr: int = SR) -> np.ndarray:
+    if intensity<=0: return v
+    y=v.copy()
+    if codec_type=="speex":
+        # de-emphasize highs
+        y = hpf_lpf(y, 0.0, 3500.0)
+    elif codec_type=="gsm":
+        y = hpf_lpf(y, 200.0, 3400.0)
+    # small noise floor
+    y = (y + np.random.normal(0, 1e-4*intensity*np.max(np.abs(y)+1e-9), y.shape)).astype(np.float32)
+    return y
+
+def apply_mic_proximity_effects(v: np.ndarray, mic_proximity: float, mic_type: str, sr: int = SR) -> np.ndarray:
+    if mic_proximity<=0: return v
+    # low shelf-like boost
+    amt = float(np.clip(mic_proximity, 0.0, 1.0))
+    low = hpf_lpf(v, 0.0, 200.0)
+    hi = v - low
+    return _soft_clip(low*(1.0+0.6*amt)+hi, 1.02)
+
+def apply_mp3_sizzle_old(v: np.ndarray, amount: float) -> np.ndarray:
+    if amount<=0: return v
+    # simple high shelf emphasis
+    lo = hpf_lpf(v, 0.0, 4000.0)
+    hi = v - lo
+    return _soft_clip(lo + hi*(1.0+0.8*amount), 1.02)
+
+# ───────────────── phone quality tiers ─────────────────
+def apply_phone_quality_tier(y: np.ndarray, tier: str, custom_params: dict = None) -> tuple[np.ndarray, str]:
+    """Apply tiered phone quality processing with predefined or custom parameters"""
+
+    # Predefined quality tiers
+    tiers = {
+        "good_landline": {
+            "bandwidth": (300, 3400),      # Standard PSTN bandwidth
+            "sample_rate_factor": 1.0,     # Disable resampling to prevent distortion
+            "bitrate_sim": 64,             # G.711 64 kbps
+            "mu_law_intensity": 0.0,       # Disable μ-law to prevent distortion
+            "noise_level": 0.0,            # Clean line
+            "dropout_boost": 0.0,          # No digital dropouts
+            "garble_boost": 0.0,           # No digital garble
+            "description": "Clean PSTN Landline"
+        },
+        "bad_landline": {
+            "bandwidth": (300, 3000),      # Noisy copper
+            "sample_rate_factor": 1.0,
+            "bitrate_sim": 64,
+            "mu_law_intensity": 0.0,
+            "noise_level": 0.002,
+            "dropout_boost": 0.0,
+            "garble_boost": 0.0,
+            "description": "Noisy PSTN Landline"
+        },
+        "cordless": {
+            "bandwidth": (250, 3500),      # Slightly different tilt
+            "sample_rate_factor": 1.0,
+            "bitrate_sim": 32,
+            "mu_law_intensity": 0.0,
+            "noise_level": 0.001,
+            "dropout_boost": 0.0,
+            "garble_boost": 0.0,
+            "description": "Analog Cordless Base"
+        },
+        "ultra_low": {
+            "bandwidth": (200, 1800),      # Back to original narrow range
+            "sample_rate_factor": 1.0,     # Disable resampling to prevent distortion
+            "bitrate_sim": 8,              # Less aggressive bitrate
+            "mu_law_intensity": 0.0,       # Disable μ-law to prevent distortion
+            "noise_level": 0.005,          # Reduced noise (was 0.01)
+            "dropout_boost": 1.5,          # Moderate dropouts
+            "garble_boost": 1.2,           # Moderate garble
+            "description": "2G/3G Poor Signal"
+        },
+        "low": {
+            "bandwidth": (200, 4000),      # Improved from 3G era
+            "sample_rate_factor": 1.0,     # Disable resampling to prevent distortion
+            "bitrate_sim": 16,             # Better bitrate
+            "mu_law_intensity": 0.0,       # Disable μ-law to prevent distortion
+            "noise_level": 0.002,          # Reduced noise (was 0.005)
+            "dropout_boost": 1.2,          # Light dropouts
+            "garble_boost": 1.0,           # Light garble
+            "description": "3G/4G Weak"
+        },
+        "standard": {
+            "bandwidth": (80, 7000),       # Typical wideband voice
+            "sample_rate_factor": 1.0,
+            "bitrate_sim": 24,
+            "mu_law_intensity": 0.0,
+            "noise_level": 0.001,
+            "dropout_boost": 0.6,
+            "garble_boost": 0.5,
+            "description": "Wideband Voice"
+        },
+        "high": {
+            "bandwidth": (20, 20000),       # HD Voice - no legacy clamp
+            "sample_rate_factor": 1.0,     # NO downsampling to prevent distortion
+            "bitrate_sim": 32,             # Good bitrate
+            "mu_law_intensity": 0.0,       # Disable μ-law to prevent distortion
+            "noise_level": 0.0,            # No noise (was 0.001)
+            "dropout_boost": 0.2,          # Very light dropouts
+            "garble_boost": 0.2,           # Very light garble
+            "description": "Modern HD Voice"
+        },
+        "ultra_high": {
+            "bandwidth": (20, SR/2),     # Near-source quality - full spectrum
+            "sample_rate_factor": 1.0,     # Full 48kHz - no downsampling
+            "bitrate_sim": 128,            # Very high bitrate
+            "mu_law_intensity": 0.0,       # No compression artifacts
+            "noise_level": 0.0,            # No added noise
+            "dropout_boost": 0.0,          # No dropouts
+            "garble_boost": 0.0,           # No garble
+            "description": "FaceTime/WhatsApp (Near-Source Quality)"
+        }
+    }
+
+    # Use custom parameters if provided, otherwise use tier defaults
+    if custom_params:
+        params = custom_params
+        description = "Custom Quality"
+    else:
+        params = tiers.get(tier, tiers["standard"])
+        description = params.get("description", tier)
+
+    # Apply bandwidth filtering
+    low_freq, high_freq = params["bandwidth"]
+    zero_phase = tier in ("high", "ultra_high")
+    y = hpf_lpf(y, float(low_freq), float(high_freq), zero_phase=zero_phase)
+
+    # Apply sample rate simulation (downsample/upsample for artifacts)
+    if params["sample_rate_factor"] < 1.0:
+        target_sr = int(SR * params["sample_rate_factor"])
+        from scipy.signal import resample
+        y_down = resample(y, int(len(y) * target_sr / SR))
+        y = resample(y_down, len(y))
+
+    # Apply μ-law processing based on tier type
+    if tier in ("high", "ultra_high"):
+        mu_amt = 0.0  # Modern VoIP/cellular - no μ-law
+    elif tier in ("good_landline", "bad_landline", "cordless"):
+        # Band-limited μ-law for authentic landline character
+        cfg = {
+            "good_landline": (0.20, 300.0, 2400.0, 0.70),
+            "bad_landline":  (0.35, 300.0, 2400.0, 0.70),
+            "cordless":      (0.35, 300.0, 2400.0, 0.70),
+        }[tier]
+        mu_amt, lo, hi, drive = cfg
+        vband = _zphf(y, hpf_hz=lo, lpf_hz=hi, sr=SR)
+        rest = y - vband
+        vband = apply_mulaw_color(vband, amount=mu_amt, mu=255.0, drive=drive)
+        y = rest + vband
+    else:
+        mu_amt = 0.0  # All other cellular tiers - no μ-law
+
+    # Apply noise
+    if params["noise_level"] > 0:
+        noise = np.random.normal(0, params["noise_level"] * np.max(np.abs(y)), y.shape)
+        y = (y + noise).astype(np.float32)
+
+    return y, description
+
+# ───────────────── UI defaults / presets (trimmed for brevity) ─────────────────
+PROCESS_AUDIO_PARAM_ORDER = [
+    "dereverb_amt", "src_hpf", "src_lpf", "leveler_amt",
+    "wpe_strength", "cleanup_mix",
+    "room_ir_file", "room_ir_gain_db",
+    "bg_file", "bg_ir_file", "bg_ir_gain_db", "bg_gain_db", "bg_hpf", "bg_lpf", "bg_duck_db",
+    "quality_tier", "custom_low_freq", "custom_high_freq", "custom_compression", "custom_noise", "custom_dropout_mult", "custom_garble_mult",
+    "bandwidth_mode", "opus_bitrate_kbps", "post_mu_grit",
+    "plc_ms", "dropout_prob", "dropout_depth_db",
+    "garble_prob", "stutter_amt", "jitter_intensity", "buffer_prob", "reorder_prob",
+    "codec_type", "codec_intensity", "mic_proximity", "mic_type", "mp3_amt", "rf_amt",
+    "handset_ir_file", "handset_ir_gain_db",
+    "traffic_files", "traffic_ev_min", "traffic_vol_db",
+    "baby_files", "baby_ev_min", "baby_vol_db",
+    "dog_files", "dog_ev_min", "dog_vol_db",
+    "normalize_output"
+]
+
+BOJAN_PRESET_DEFAULTS: Dict[str, Any] = {
+    "dereverb_amt": 0.0, "src_hpf": 0.0, "src_lpf": SR/2, "leveler_amt": 0.0, "wpe_strength": 0.0, "cleanup_mix": 1.0,
+    "room_ir_file": None, "room_ir_gain_db": 0.0,
+    "bg_file": None, "bg_ir_file": None, "bg_ir_gain_db": 0.0, "bg_gain_db": -48.0, "bg_hpf": 40.0, "bg_lpf": 12000.0, "bg_duck_db": -24.0,
+    "quality_tier": "standard", "custom_low_freq": 300.0, "custom_high_freq": 3500.0, "custom_compression": 0.5, "custom_noise": 0.0, "custom_dropout_mult": 1.0, "custom_garble_mult": 1.0,
+    "bandwidth_mode": "Wideband 80–7000", "opus_bitrate_kbps": 24, "post_mu_grit": 0.0,
+    "plc_ms": 40.0, "dropout_prob": 0.08, "dropout_depth_db": -24.0,
+    "garble_prob": 0.04, "stutter_amt": 0.02, "jitter_intensity": 0.01, "buffer_prob": 0.01, "reorder_prob": 0.01,
+    "codec_type": "speex", "codec_intensity": 0.3, "mic_proximity": 0.0, "mic_type": "dynamic", "mp3_amt": 0.0, "rf_amt": 0.0,
+    "handset_ir_file": None, "handset_ir_gain_db": 0.0,
+    "traffic_files": None, "traffic_ev_min": 0.0, "traffic_vol_db": -12.0,
+    "baby_files": None, "baby_ev_min": 0.0, "baby_vol_db": -12.0,
+    "dog_files": None, "dog_ev_min": 0.0, "dog_vol_db": -12.0,
+    "normalize_output": True,
+}
+
+# Presets omitted here for brevity in this minimal drop-in; presume presets.json is used externally where needed
+
+PRESETS_PATH = "presets.json"
+
+# ───────────────── main processing ─────────────────
+def process_audio(
+    mic_file,
+
+    # Source
+    dereverb_amt, src_hpf, src_lpf, leveler_amt,
+    wpe_strength, cleanup_mix,
+
+    # Room IR (pre)
+    room_ir_file, room_ir_gain_db,
+
+    # Background
+    bg_file, bg_ir_file, bg_ir_gain_db, bg_gain_db, bg_hpf, bg_lpf, bg_duck_db,
+
+    # Phone quality system
+    quality_tier, custom_low_freq, custom_high_freq, custom_compression, custom_noise, custom_dropout_mult, custom_garble_mult,
+
+    # Phone color / codec (legacy)
+    bandwidth_mode, opus_bitrate_kbps, post_mu_grit,
+
+    # Network artifacts (enhanced realistic effects)
+    plc_ms, dropout_prob, dropout_depth_db,
+    garble_prob, stutter_amt, jitter_intensity, buffer_prob, reorder_prob,
+    codec_type, codec_intensity, mic_proximity, mic_type, mp3_amt, rf_amt,
+
+    # Handset IR (post)
+    handset_ir_file, handset_ir_gain_db,
+
+    # SFX events
+    traffic_files, traffic_ev_min, traffic_vol_db,
+    baby_files, baby_ev_min, baby_vol_db,
+    dog_files, dog_ev_min, dog_vol_db,
+
+    # Output
+    normalize_output
+):
+    # input
+    mic_path=_safe_file(mic_file)
+    if not mic_path: return None, "No input."
+    y,sr=_load_audio(mic_path); y=_mono_sr(y,sr,SR)
+    if len(y)<int(0.05*SR): return None,"Input too short."
+    if len(y)>30*60*SR: return None,"Input too long (>30m)."
+
+    # 1) Source cleanup
+    modern = quality_tier in ["high", "ultra_high"]
+
+    # Source EQ window and leveler
+    y = hpf_lpf(y, float(src_hpf), float(src_lpf), zero_phase=True if modern else False)
+
+    if leveler_amt > 0.0:
+        y = leveler(y, float(leveler_amt))
+
+    # WPE + dereverb with blend
+    try:
+        cleanup_mix = float(cleanup_mix)
+    except Exception:
+        cleanup_mix = 1.0 if not modern else 0.0
+    cleanup_mix = float(np.clip(cleanup_mix, 0.0, 1.0))
+    if not modern:
+        cleanup_mix = 1.0
+
+    user_requested_cleanup = (wpe_strength > 0.0) or (dereverb_amt > 0.0)
+    cleanup_allowed = (not modern) or user_requested_cleanup
+
+    y_base = y.astype(np.float32, copy=True)
+    wpe_note = ""
+    if cleanup_allowed and user_requested_cleanup:
+        y_proc = y_base.copy()
+        if wpe_strength > 0.0:
+            try:
+                iters = 2 if wpe_strength >= 0.66 else 1
+                y_wpe, wpe_msg = wpe_dereverb(y_proc, iters, 12, 3)
+                y_proc = (1.0 - wpe_strength) * y_proc + wpe_strength * y_wpe.astype(np.float32)
+                if wpe_msg == "WPE applied" and (not modern or cleanup_mix > 0.0):
+                    wpe_note = " · WPE"
+            except Exception:
+                pass
+        if dereverb_amt > 0.0:
+            y_proc = dereverb_strong(y_proc, dereverb_amt)
+
+        if not modern or cleanup_mix >= 0.999:
+            y = y_proc
+        elif cleanup_mix <= 0.001:
+            y = y_base
+        else:
+            y = y_base + cleanup_mix * (y_proc - y_base)
+
+    # 2) Room IR (pre-codec) with double guard vs Background IR
+    _room_ir = _safe_file(room_ir_file)
+    _bg_ir_for_guard = _safe_file(bg_ir_file)
+    if _room_ir and _bg_ir_for_guard and os.path.abspath(_room_ir) == os.path.abspath(_bg_ir_for_guard):
+        # If same IR provided for room and background, skip room IR to avoid double
+        _room_ir_apply = None
+    else:
+        _room_ir_apply = _room_ir
+    y = convolve_ir(y, _room_ir_apply, float(room_ir_gain_db))  # room_ir_gain_db now represents mix %
+
+    # 3) Events BEFORE phone coloration (so they get processed through phone chain too)
+    xlen=len(y)
+    traf_ok,_ = _expand_files_with_warnings(_coerce_paths_list(traffic_files))
+    baby_ok,_ = _expand_files_with_warnings(_coerce_paths_list(baby_files))
+    dog_ok,_  = _expand_files_with_warnings(_coerce_paths_list(dog_files))
+    y += place_events(xlen, traf_ok, float(traffic_ev_min), float(traffic_vol_db))
+    y += place_events(xlen, baby_ok,  float(baby_ev_min),  float(baby_vol_db))
+    y += place_events(xlen, dog_ok,   float(dog_ev_min),   float(dog_vol_db))
+
+    # 4) Background bed (with Background IR and its own filters + ducking)
+    bg_candidates = _coerce_paths_list(bg_file)
+    selected_bg = random.choice(bg_candidates) if bg_candidates else None
+    y = stream_background(y, _safe_file(selected_bg), (_bg_ir_for_guard if (_bg_ir_for_guard and (not _room_ir or os.path.abspath(_bg_ir_for_guard) != os.path.abspath(_room_ir))) else None),
+                          float(bg_ir_gain_db), float(bg_gain_db),
+                          float(bg_hpf), float(bg_lpf), float(bg_duck_db))
+
+    # Pre-limit the combined remote mix so μ-law/codec can't splatter
+    peak = float(np.max(np.abs(y)) or 1.0)
+    if peak > 0.707:  # ~ -3 dBFS
+        y = (y * (0.707 / peak)).astype(np.float32)
+
+    # 5) Phone quality system
+    if quality_tier != "custom":
+        y, quality_description = apply_phone_quality_tier(y, str(quality_tier), None)
+        codec_status = quality_description
+    else:
+        custom_params = {
+            "bandwidth": (float(custom_low_freq), float(custom_high_freq)),
+            "sample_rate_factor": 1.0,
+            "bitrate_sim": 24,
+            "mu_law_intensity": float(custom_compression),
+            "noise_level": float(custom_noise),
+            "dropout_boost": float(custom_dropout_mult),
+            "garble_boost": float(custom_garble_mult)
+        }
+        y, quality_description = apply_phone_quality_tier(y, "custom", custom_params)
+        codec_status = f"Custom Quality ({int(custom_low_freq)}-{int(custom_high_freq)}Hz)"
+
+    # Legacy processing (only for non-modern tiers)
+    modern = quality_tier in ["high", "ultra_high"]
+    if not modern:
+        if bandwidth_mode=="Narrowband 300–3500":
+            y=hpf_lpf(y, 300.0, 3500.0)
+        elif bandwidth_mode=="Wideband 80–7000":
+            y=hpf_lpf(y, 80.0, 7000.0)
+
+    # Opus processing (skip for high-quality tiers and landlines to preserve source quality)
+    skip_opus = quality_tier in ["high", "ultra_high", "good_landline", "bad_landline", "cordless"]
+    if not skip_opus and opus_bitrate_kbps < 32:  # Only apply Opus for lower bitrates
+        tmp_in=_save_wav_tmp(y)
+        tmp_out=_tmp_path(".opus")
+        # fixed ffmpeg line - no stray "i"
+        enc=["ffmpeg","-y","-hide_banner","-loglevel","error","-i",tmp_in,"-c:a","libopus","-b:a",f"{int(opus_bitrate_kbps)}k","-ar",str(SR),tmp_out]
+        os.system(" ".join(enc))
+        tmp_back=_tmp_path(".wav")
+        os.system(f'ffmpeg -y -hide_banner -loglevel error -i "{tmp_out}" -ar {SR} -ac 1 -f wav "{tmp_back}"')
+        _, y = wavfile.read(tmp_back)
+        if y.dtype.kind == 'i':
+            y = y.astype(np.float32) / 32768.0
+        else:
+            y = y.astype(np.float32)
+
+    # Additional μ-law grit (legacy control) - reduced for more realistic calls
+    if post_mu_grit>0:
+        a=float(np.clip(post_mu_grit,0.0,0.15)); mu=255.0
+        comp=np.sign(y)*np.log1p(mu*np.abs(y))/np.log1p(mu)
+        y=((1.0-a)*y + a*comp).astype(np.float32)
+
+    # 6) Network artifacts with quality-aware scaling
+    # Skip digital artifacts for landline tiers (they have analog-specific issues instead)
+    skip_digital_artifacts = quality_tier in ["good_landline", "bad_landline", "cordless"]
+
+    if not skip_digital_artifacts:
+        # Get quality multipliers for artifacts
+        if quality_tier == "custom":
+            dropout_mult = float(custom_dropout_mult)
+            garble_mult = float(custom_garble_mult)
+            tier_stutter_amt = 0.0
+        else:
+            # map tiers
+            mult_map = {
+                "ultra_low": (2.0, 1.8, 0.05),
+                "low":       (1.4, 1.2, 0.03),
+                "standard":  (1.0, 1.0, 0.02),
+                "high":      (0.5, 0.5, 0.01),
+                "ultra_high":(0.2, 0.2, 0.00),
+            }
+            dropout_mult, garble_mult, tier_stutter_amt = mult_map.get(quality_tier, (1.0,1.0,0.02))
+
+        scaled_dropout_prob = float(dropout_prob) * dropout_mult
+        y = apply_dropouts_old(y, min(scaled_dropout_prob, 1.0), float(plc_ms), float(dropout_depth_db))
+
+        # Enhanced realistic network artifacts - use tier-specific stutter if available
+        final_stutter_amt = tier_stutter_amt if tier_stutter_amt > 0 else float(stutter_amt)
+        y = apply_stutter_old(y, final_stutter_amt, SR)
+        y = apply_jitter_buffering(y, float(jitter_intensity), float(buffer_prob), SR)
+        y = apply_packet_reordering(y, float(reorder_prob), SR)
+        y = apply_codec_artifacts(y, codec_type, float(codec_intensity), SR)
+        y = apply_mic_proximity_effects(y, float(mic_proximity), mic_type, SR)
+        y = apply_mp3_sizzle_old(y, float(mp3_amt))
+    else:
+        # Landline-specific processing
+        if quality_tier == "bad_landline":
+            # Light jitter for analog line instability (not digital jitter)
+            y = apply_jitter_buffering(y, min(float(jitter_intensity) * 0.5, 0.01), 0.0, SR)
+        elif quality_tier == "cordless":
+            # Moderate dropout for range interference (not packet dropouts)
+            scaled_dropout_prob = min(float(dropout_prob) * 0.5, 0.15)
+            y = apply_dropouts_old(y, scaled_dropout_prob, float(plc_ms), float(dropout_depth_db))
+            # Light stutter for RF interference
+            y = apply_stutter_old(y, min(float(stutter_amt) * 0.5, 0.04), SR)
+            # RF noise for cordless interference (only if slider > 0)
+            y = apply_rf_noise_old(y, float(rf_amt))
+        # good_landline gets no additional artifacts (clean line)
+
+    # Safety before normalization to avoid nasty codec-fed hard clips
+    if np.max(np.abs(y)) > 1.0:
+        y = _soft_clip(y, drive=1.1)
+
+    # 7) Handset IR (post) - skipped for modern tiers
+    if quality_tier not in ["high", "ultra_high"]:
+        y = convolve_ir(y, _safe_file(handset_ir_file), float(handset_ir_gain_db))
+
+    # 8) Final normalization
+    if normalize_output:
+        y = normalize_audio_lufs(y, -18.0)
+        norm_note = " · Normalized"
+    else:
+        y = normalize_peak(y, 0.97)
+        norm_note = ""
+
+    return _save_wav_tmp(y), f"OK · Codec: {codec_status}{wpe_note}{norm_note}"
+
+# ───────────────── helpers omitted earlier in file for brevity ─────────────────
+def _expand_files_with_warnings(files: List[str]) -> Tuple[List[str], List[str]]:
+    ok=[]; warn=[]
+    for p in files or []:
+        if not os.path.exists(p):
+            warn.append(f"Missing: {p}")
+        else:
+            ok.append(p)
+    return ok, warn
+
+def normalize_peak(y: np.ndarray, peak: float = 0.97) -> np.ndarray:
+    m = float(np.max(np.abs(y)) or 1.0)
+    if m>0:
+        y = y * (peak/m)
+    return y.astype(np.float32)
+
+def normalize_audio_lufs(y: np.ndarray, target_lufs: float = -18.0) -> np.ndarray:
+    # simple RMS proxy for LUFS
+    cur = rms_db(y)
+    diff = target_lufs - cur
+    gain = 10.0**(diff/20.0)
+    return (y*gain).astype(np.float32)
+
+# placeholder RF noise old
+def apply_rf_noise_old(y: np.ndarray, amount: float) -> np.ndarray:
+    if amount<=0: return y
+    n = np.random.normal(0, 1e-3*float(amount)*np.max(np.abs(y)+1e-9), y.shape)
+    return _soft_clip(y + n, 1.02)
+
+# simple WPE shim
+def wpe_dereverb(y: np.ndarray, iters: int = 1, taps: int = 12, delay: int = 3) -> Tuple[np.ndarray, str]:
+    try:
+        import nara_wpe as wpe
+        y2 = y.astype(np.float64)[None, None, :]
+        R = wpe.wpe(y2, taps=taps, delay=delay, iterations=iters)
+        out = R[0,0,:].astype(np.float32)
+        return out, "WPE applied"
+    except Exception:
+        return y.astype(np.float32), "WPE unavailable"
+
+# ───────────────── event placement ─────────────────
+def place_events(total_len: int, files: List[str], ev_min_seconds: float, vol_db: float) -> np.ndarray:
+    if not files: return np.zeros(total_len, dtype=np.float32)
+    out = np.zeros(total_len, dtype=np.float32)
+    occ = np.zeros(total_len, dtype=np.int32)
+    max_overlap = 0.25
+    target_level = 10.0**(float(vol_db)/20.0)
+    # place one every ev_min_seconds at most
+    step = max(int(ev_min_seconds*SR), int(1.0*SR))
+    for i in range(0, total_len, step):
+        if random.random() < 0.8:
+            # pick file
+            fpath = random.choice(files)
+            x, sr = _load_audio(fpath)
+            x = _mono_sr(x, sr, SR)
+            # random 1-4 seconds for small events, or full if short
+            original_duration = len(x)/SR
+            if original_duration > 6.0:
+                # take a 2.5s slice
+                span = int(2.5*SR)
+                if len(x) > span:
+                    start = random.randint(0, len(x)-span)
+                    s = x[start:start+span]
+                else:
+                    s = x
+            else:
+                s = x
+
+            # place non-overlapping-ish
+            L=len(s)
+            placed=False
+            for _ in range(12):
+                start=np.random.randint(0,total_len-L) if total_len>L else 0
+                if total_len<=L:
+                    placed=True; break
+                overlap=occ[start:start+L].sum()/max(1,L)
+                if overlap<=max_overlap:
+                    placed=True; break
+            if not placed: 
+                continue
+
+            end=start+L
+            fade=max(4,int(0.004*SR))
+
+            # Apply fade window - longer fades for long ambient samples
+            if original_duration >= 3.0:
+                fade = max(fade, int(0.15*SR))  # 150ms fade for ambient samples
+
+            # RMS normalization for consistent event levels
+            rms = np.sqrt(np.mean(s**2) + 1e-9)
+            target_rms = 0.1  # Consistent RMS level for all events
+            if rms > 0:
+                s = s * (target_rms / rms)
+
+            w = fade_window(L, fade)
+            s = (s*w).astype(np.float32)
+            out[start:end] += target_level * s
+            occ[start:end] += 1
+    return out.astype(np.float32)
+
+# ───────────────── Gradio UI (kept minimal - full UI retained) ─────────────────
+def load_presets() -> Dict[str, Any]:
+    try:
+        if not os.path.exists(PRESETS_PATH): 
+            return {"presets": {}}
+        with open(PRESETS_PATH,"r") as f:
+            j=json.load(f)
+        if not isinstance(j,dict): 
+            return {"presets": {}}
+        return j
+    except Exception:
+        return {"presets": {}}
+
+def _display_single(x):
+    return os.path.abspath(_safe_file(x) or "") if _safe_file(x) else ""
+
+def _display_multi(x):
+    return "\n".join([os.path.abspath(p) for p in _coerce_paths_list(x)])
+
+def process_bojan_preset(mic_file, preset_name: str, normalize_override: Optional[bool] = None):
+    """Run the simplified preset flow used by the basic Bojan UI."""
+    # This stub keeps API compatible; full preset configs expected in presets.json
+    preset_data = load_presets()
+    preset = (preset_data.get("presets") or {}).get(preset_name)
+    if not preset:
+        return None, f"Unknown preset '{preset_name}'."
+
+    cfg = dict(BOJAN_PRESET_DEFAULTS)
+    cfg.update(preset)
+    if normalize_override is not None:
+        cfg["normalize_output"] = bool(normalize_override)
+
+    args = [cfg.get(name, BOJAN_PRESET_DEFAULTS.get(name)) for name in PROCESS_AUDIO_PARAM_ORDER]
+    return process_audio(
+        mic_file,
+        *args
+    )
+
+def process_editor_request(
+    mic_file,
+    dereverb_amt, src_hpf, src_lpf, leveler_amt,
+    wpe_strength, cleanup_mix,
+    room_ir_upload, room_ir_path, room_ir_gain,
+    bg_files, bg_ir_upload, bg_ir_path, bg_ir_gain, bg_gain, bg_hpf, bg_lpf, bg_duck,
+    quality_tier, custom_low, custom_high, custom_comp, custom_noise, custom_drop_mult, custom_garble_mult,
+    bandwidth_mode, opus_bitrate_kbps, post_mu_grit,
+    plc_ms, dropout_prob, dropout_depth_db,
+    garble_p, stutter_a, jitter_a, buffer_p, reorder_p,
+    codec_type, codec_intensity, mic_proximity, mic_type, mp3_a, rf_a,
+    handset_ir_upload, handset_ir_path, handset_ir_gain,
+    traf_files, traf_ev, traf_vol,
+    baby_files, baby_ev, baby_vol,
+    dog_files, dog_ev, dog_vol,
+    normalize_output
+):
+    room_ir_final = _resolve_file(room_ir_upload, room_ir_path)
+    bg_final = _coerce_paths_list(bg_files)
+    bg_ir_final = _resolve_file(bg_ir_upload, bg_ir_path)
+    handset_ir_final = _resolve_file(handset_ir_upload, handset_ir_path)
+
+    return process_audio(
+        mic_file,
+        float(dereverb_amt), float(src_hpf), float(src_lpf), float(leveler_amt),
+        float(wpe_strength), float(cleanup_mix),
+        room_ir_final, float(room_ir_gain),
+        "\n".join(bg_final), bg_ir_final, float(bg_ir_gain), float(bg_gain), float(bg_hpf), float(bg_lpf), float(bg_duck),
+        str(quality_tier), float(custom_low), float(custom_high), float(custom_comp), float(custom_noise), float(custom_drop_mult), float(custom_garble_mult),
+        str(bandwidth_mode), int(opus_bitrate_kbps), float(post_mu_grit),
+        float(plc_ms), float(dropout_prob), float(dropout_depth_db),
+        float(garble_p), float(stutter_a), float(jitter_a), float(buffer_p), float(reorder_p),
+        str(codec_type), float(codec_intensity), float(mic_proximity), str(mic_type), float(mp3_a), float(rf_a),
+        handset_ir_final, float(handset_ir_gain),
+        _coerce_paths_list(traf_files), float(traf_ev), float(traf_vol),
+        _coerce_paths_list(baby_files), float(baby_ev), float(baby_vol),
+        _coerce_paths_list(dog_files), float(dog_ev), float(dog_vol),
+        bool(normalize_output)
+    )
+
+def create_app():
+    with gr.Blocks(theme=gr.themes.Soft(primary_hue="purple")) as demo:
+        gr.Markdown("## Voice Lab FX — Engineer Editor")
+
+        with gr.Tab("Source"):
+            mic = gr.Audio(type="filepath", label="Mic Input")
+            dereverb_amt = gr.Slider(0,1,0, step=0.01, label="Dereverb Amount")
+            src_hpf = gr.Slider(0,200,0, step=1, label="Source HPF")
+            src_lpf = gr.Slider(1000, SR/2, SR/2, step=100, label="Source LPF")
+            leveler_amt = gr.Slider(0,1,0, step=0.01, label="Leveler Amount")
+            wpe_strength = gr.Slider(0,1,0, step=0.05, label="WPE Strength")
+            cleanup_mix = gr.Slider(0,1,1, step=0.05, label="Cleanup Mix (modern tiers default to blend 0)")
+
+        with gr.Tab("Room IR"):
+            room_ir = gr.File(label="Room IR (WAV)")
+            room_ir_path = gr.Textbox(label="Current Room IR", value="", interactive=False)
+            room_ir_gain = gr.Slider(0,100,0, step=1, label="Room IR Mix (%)")
+            room_ir.change(_display_single, inputs=room_ir, outputs=room_ir_path)
+
+        with gr.Tab("Background"):
+            bg_files = gr.Files(label="Background Files")
+            bg_ir = gr.File(label="Background IR (WAV)")
+            bg_ir_path = gr.Textbox(label="Current BG IR", value="", interactive=False)
+            bg_ir_gain = gr.Slider(0,100,0, step=1, label="BG IR Mix (%)")
+            bg_gain = gr.Slider(-60,0,-36, step=1, label="BG Gain (dB)")
+            bg_hpf = gr.Slider(0,200,40, step=1, label="BG HPF (Hz)")
+            bg_lpf = gr.Slider(500, SR/2, 12000, step=100, label="BG LPF (Hz)")
+            bg_duck = gr.Slider(-48,0,-24, step=1, label="BG Duck (dB)")
+            bg_ir.change(_display_single, inputs=bg_ir, outputs=bg_ir_path)
+
+        with gr.Tab("Phone Quality"):
+            quality_tier = gr.Dropdown(choices=[
+                "ultra_low","low","standard","high","ultra_high",
+                "good_landline","bad_landline","cordless","custom"
+            ], value="standard", label="Quality Tier")
+            custom_low = gr.Slider(20, 1000, 300, step=10, label="Custom Low Hz")
+            custom_high = gr.Slider(1000, SR/2, 3500, step=100, label="Custom High Hz")
+            custom_comp = gr.Slider(0,1,0.5, step=0.05, label="Custom μ-law Amount")
+            custom_noise = gr.Slider(0,0.01,0, step=0.0005, label="Custom Noise")
+            custom_drop_mult = gr.Slider(0,3,1, step=0.1, label="Custom Dropout Mult")
+            custom_garble_mult = gr.Slider(0,3,1, step=0.1, label="Custom Garble Mult")
+
+        with gr.Tab("Legacy Codec"):
+            bandwidth_mode = gr.Dropdown(choices=["Narrowband 300–3500","Wideband 80–7000"], value="Wideband 80–7000", label="Legacy Bandwidth Mode")
+            opus_bitrate = gr.Slider(8,64,24, step=1, label="Opus Bitrate kbps (applies to low tiers only)")
+            post_mu = gr.Slider(0,0.15,0, step=0.01, label="Post μ-law grit (legacy)")
+
+        with gr.Tab("Network Artifacts"):
+            plc_ms = gr.Slider(0,80,40, step=1, label="PLC Window (ms)")
+            dropout_prob = gr.Slider(0,1,0.08, step=0.01, label="Dropout Prob")
+            dropout_depth_db = gr.Slider(-60,0,-24, step=1, label="Dropout Depth (dB)")
+            garble_p = gr.Slider(0,1,0.04, step=0.01, label="Garble Prob")
+            stutter_a = gr.Slider(0,0.1,0.02, step=0.002, label="Stutter Amount")
+            jitter_a = gr.Slider(0,0.1,0.01, step=0.001, label="Jitter Intensity")
+            buffer_p = gr.Slider(0,0.2,0.01, step=0.005, label="Buffer Freeze Prob")
+            reorder_p = gr.Slider(0,0.2,0.01, step=0.005, label="Packet Reorder Prob")
+            codec_type = gr.Dropdown(choices=["speex","gsm"], value="speex", label="Codec Type")
+            codec_intensity = gr.Slider(0,1,0.3, step=0.05, label="Codec Intensity")
+            mic_proximity = gr.Slider(0,1,0, step=0.05, label="Mic Proximity")
+            mic_type = gr.Dropdown(choices=["dynamic","condenser"], value="dynamic", label="Mic Type")
+            mp3_a = gr.Slider(0,1,0, step=0.05, label="MP3 Sizzle")
+            rf_a = gr.Slider(0,1,0, step=0.05, label="RF Noise (cordless only)")
+
+        with gr.Tab("Handset IR"):
+            handset_ir = gr.File(label="Handset/Speaker IR (WAV)")
+            handset_ir_path = gr.Textbox(label="Current Handset IR", value="", interactive=False)
+            handset_ir_gain = gr.Slider(-24, 24, 0, step=0.5, label="Handset IR Gain (dB)")
+            handset_ir.change(_display_single, inputs=handset_ir, outputs=handset_ir_path)
+
+        with gr.Tab("SFX Generators"):
+            traf_files = gr.Files(label="Traffic Horns")
+            traf_ev = gr.Slider(0,30,10, step=1, label="Min Seconds Between Traffic")
+            traf_vol = gr.Slider(-48,6,-4, step=1, label="Traffic Level (dB)")
+            baby_files = gr.Files(label="Baby Cries")
+            baby_ev = gr.Slider(0,30,0, step=1, label="Min Seconds Between Baby")
+            baby_vol = gr.Slider(-48,6,-12, step=1, label="Baby Level (dB)")
+            dog_files = gr.Files(label="Dogs")
+            dog_ev = gr.Slider(0,30,0, step=1, label="Min Seconds Between Dogs")
+            dog_vol = gr.Slider(-48,6,-12, step=1, label="Dog Level (dB)")
+
+        with gr.Tab("Output"):
+            normalize_output = gr.Checkbox(True, label="Normalize Output (-18 LUFS)")
+
+        out = gr.Audio(label="Processed", type="filepath")
+        status = gr.Textbox(label="Status")
+
+        btn = gr.Button("Process")
+
+        btn.click(
+            process_editor_request,
+            inputs=[
+                mic,
+                dereverb_amt, src_hpf, src_lpf, leveler_amt,
+                wpe_strength, cleanup_mix,
+                room_ir, room_ir_path, room_ir_gain,
+                bg_files, bg_ir, bg_ir_path, bg_ir_gain, bg_gain, bg_hpf, bg_lpf, bg_duck,
+                quality_tier, custom_low, custom_high, custom_comp, custom_noise, custom_drop_mult, custom_garble_mult,
+                bandwidth_mode, opus_bitrate, post_mu,
+                plc_ms, dropout_prob, dropout_depth_db,
+                garble_p, stutter_a, jitter_a, buffer_p, reorder_p,
+                codec_type, codec_intensity, mic_proximity, mic_type, mp3_a, rf_a,
+                handset_ir, handset_ir_path, handset_ir_gain,
+                traf_files, traf_ev, traf_vol,
+                baby_files, baby_ev, baby_vol,
+                dog_files, dog_ev, dog_vol,
+                normalize_output
+            ],
+            outputs=[out, status]
+        )
+
+    return demo
+
+# ───────────────── main ─────────────────
+if __name__ == "__main__":
+    app = create_app()
+    app.launch()

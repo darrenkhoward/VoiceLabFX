@@ -1,0 +1,790 @@
+Understood. Here’s the complete app.py with Claude’s fixes applied while keeping all DSP blocks exactly as-is (old garble, stutter, robot, dropouts unchanged). I only fixed the ffmpeg command, preset save wiring, and added the requested reliability/validation/memory tweaks and smoother background looping.
+
+# VoiceLab FX — Editor (Exact Old FX + Reliability Fixes)
+# Chain: Mic → (Dereverb/EQ/Leveler) → Room IR → Background(+BG-IR, HPF/LPF, Duck, Random Start)
+#        → Bandwidth → Opus → OLD Artifacts (garble/stutter/robot/dropouts) → Handset IR → Events → Normalize
+
+from __future__ import annotations
+import os, json, glob, time, atexit, tempfile, hashlib, subprocess, shutil, random
+from typing import List, Tuple, Optional, Any, Dict
+
+import numpy as np
+import soundfile as sf
+import gradio as gr
+from scipy.signal import resample_poly, butter, sosfilt, fftconvolve, stft, istft, get_window
+
+# ───────────────────────── constants ─────────────────────────
+SR = 16000
+TMP_DIR = os.environ.get("VLAB_TMPDIR", tempfile.gettempdir())
+PRESETS_PATH = "presets.json"
+ALLOWED_EXT = (".wav", ".mp3", ".flac", ".ogg", ".aiff", ".aif")
+
+# ───────────────────────── basic utils ─────────────────────────
+def have_ffmpeg() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+def _safe_file(obj) -> Optional[str]:
+    if isinstance(obj, str):
+        return obj if obj and os.path.exists(obj) else None
+    if isinstance(obj, dict):
+        p = obj.get("name")
+        return p if p and os.path.exists(p) else None
+    return None
+
+def _is_audio_path(p: Optional[str]) -> bool:
+    return bool(p and isinstance(p, str) and p.lower().endswith(ALLOWED_EXT) and os.path.exists(p))
+
+def _coerce_paths_list(files) -> List[str]:
+    out=[]
+    if isinstance(files, list):
+        for it in files:
+            if isinstance(it, dict):
+                p = it.get("name")
+                if _is_audio_path(p): out.append(p)
+            elif isinstance(it, str) and _is_audio_path(it):
+                out.append(it)
+    elif isinstance(files, str) and _is_audio_path(files):
+        out.append(files)
+    return out
+
+def _load_audio(path: str) -> Tuple[np.ndarray, int]:
+    y, sr = sf.read(path, dtype="float32", always_2d=False)
+    return y, sr
+
+def _dur_seconds(path: str) -> float:
+    try:
+        with sf.SoundFile(path) as f:
+            return float(len(f) / f.samplerate)
+    except Exception:
+        return 0.0
+
+def _mono_sr(y: np.ndarray, sr: int, target: int = SR) -> np.ndarray:
+    if y.ndim > 1: y = y.mean(axis=1)
+    if sr != target:
+        g = np.gcd(int(sr), int(target)); up, down = target//g, sr//g
+        y = resample_poly(y, up, down).astype(np.float32)
+    return y.astype(np.float32)
+
+def _save_wav_tmp(y: np.ndarray, sr: int = SR, suffix: str = ".wav") -> str:
+    f = tempfile.NamedTemporaryFile(delete=False, prefix="vlab_", suffix=suffix, dir=TMP_DIR)
+    sf.write(f.name, y.astype(np.float32), sr)
+    return f.name
+
+def normalize_peak(x: np.ndarray, peak: float = 0.97) -> np.ndarray:
+    m = float(np.max(np.abs(x)) or 0.0)
+    return x if m < 1e-9 else (x / m * peak).astype(np.float32)
+
+def fade_window(n: int, fade: int) -> np.ndarray:
+    if fade<=0 or fade*2>=n: return np.ones(n, dtype=np.float32)
+    w = np.ones(n, dtype=np.float32)
+    r = np.linspace(0,1,fade,dtype=np.float32)
+    w[:fade]=r; w[-fade:]=r[::-1]; return w
+
+def _purge_temp(prefix="vlab_", older_than_sec=24*3600):
+    now = time.time()
+    try:
+        for p in os.listdir(TMP_DIR):
+            if not p.startswith(prefix): continue
+            f = os.path.join(TMP_DIR, p)
+            if now - os.path.getmtime(f) > older_than_sec:
+                os.remove(f)
+    except Exception:
+        pass
+atexit.register(_purge_temp)
+
+# ───────────────────────── filters / env ─────────────────────────
+def hpf_lpf(x: np.ndarray, hpf_hz: float = 0.0, lpf_hz: float = SR/2) -> np.ndarray:
+    y = x
+    if hpf_hz and hpf_hz > 20:
+        sos = butter(2, min(0.99, hpf_hz/(SR/2)), btype="high", output="sos"); y = sosfilt(sos, y)
+    if lpf_hz and lpf_hz < (SR/2):
+        sos = butter(4, max(1e-4, lpf_hz/(SR/2)), btype="low", output="sos"); y = sosfilt(sos, y)
+    return y.astype(np.float32)
+
+def env_follow(x: np.ndarray, atk_ms=15.0, rel_ms=350.0) -> np.ndarray:
+    atk=max(1,int(SR*atk_ms/1000.0)); rel=max(1,int(SR*rel_ms/1000.0))
+    e=np.zeros_like(x,dtype=np.float32); g=0.0; ax=np.abs(x)
+    for i,v in enumerate(ax):
+        g = (1-1/atk)*g + (1/atk)*v if v>g else (1-1/rel)*g + (1/rel)*v
+        e[i]=g
+    m=float(e.max() or 1.0); return (e/m).astype(np.float32)
+
+# ───────────────────────── dereverb (strong + deep) ─────────────────────────
+def dereverb_strong(y: np.ndarray, amount: float, deep: bool=False) -> np.ndarray:
+    """
+    Aggressive spectral gating with minima tracking and oversubtraction.
+    'deep' runs a second pass (~80% of first).
+    """
+    def pass_once(sig: np.ndarray, a: float) -> np.ndarray:
+        if a<=0: return sig.astype(np.float32)
+        nper=512; nover=384; win=get_window("hann", nper)
+        f,t,Z = stft(sig, SR, window=win, nperseg=nper, noverlap=nover, padded=False)
+        mag=np.abs(Z).astype(np.float32); phase=np.angle(Z).astype(np.float32)
+        pctl = 8.0 - 6.0*a
+        noise0 = np.percentile(mag, pctl, axis=1, keepdims=True).astype(np.float32)
+        k = int(6 + 18*a)
+        if k>1:
+            pad = np.pad(noise0, ((0,0),(k,k)), mode="edge")
+            noise = np.minimum.reduce([pad[:,i:i+noise0.shape[1]] for i in range(2*k+1)])
+        else:
+            noise = noise0
+        over = 1.8 + 2.8*a
+        floor = 0.04 + 0.22*a
+        mask = np.maximum(mag - over*noise, floor*mag) / (mag + 1e-9)
+        # temporal/freq smoothing
+        kt = int(2 + 8*a)
+        if kt>1:
+            pad = np.pad(mask, ((0,0),(kt,kt)), mode="edge")
+            acc = np.zeros_like(mask)
+            for i in range(2*kt+1): acc += pad[:,i:i+mask.shape[1]]
+            mask = acc/float(2*kt+1)
+        kf = int(1 + 4*a)
+        if kf>0:
+            pad = np.pad(mask, ((kf,kf),(0,0)), mode="edge")
+            acc = np.zeros_like(mask)
+            for i in range(2*kf+1): acc += pad[i:i+mask.shape[0], :]
+            mask = acc/float(2*kf+1)
+        mag2 = mag*mask
+        Z2 = mag2*np.exp(1j*phase)
+        _, out = istft(Z2, SR, window=win, nperseg=nper, noverlap=nover)
+        return out.astype(np.float32)
+    a = float(np.clip(amount, 0.0, 1.0))
+    if a<=0: return y.astype(np.float32)
+    y1 = pass_once(y, a)
+    return pass_once(y1, min(1.0, a*0.8)) if deep else y1
+
+# ───────────────────────── convolution & background ─────────────────────────
+def convolve_ir(x: np.ndarray, ir_path: Optional[str], gain_db: float = 0.0) -> np.ndarray:
+    if not ir_path or not os.path.exists(ir_path): return x
+    # RELIABILITY: IR must be <= 2.0s
+    dur = _dur_seconds(ir_path)
+    if dur > 2.0:  # clamp by reading only needed frames later would complicate; reject to be safe
+        # Return dry signal if IR too long, but do not crash
+        return x
+    ir,sr=_load_audio(ir_path); ir=_mono_sr(ir,sr,SR)
+    if len(ir)<8: return x
+    ir=ir/(np.max(np.abs(ir))+1e-9)
+    wet=fftconvolve(x, ir, mode="same").astype(np.float32)
+    return (wet * 10**(gain_db/20.0)).astype(np.float32)
+
+def _xfade(a: np.ndarray, b: np.ndarray, n: int) -> np.ndarray:
+    """short crossfade to avoid clicks on loop wraps"""
+    n = int(max(4, min(n, len(a), len(b))))
+    w = np.linspace(0, 1, n, dtype=np.float32)
+    out = a.copy()
+    out[-n:] = (a[-n:] * (1.0 - w) + b[:n] * w).astype(np.float32)
+    return out
+
+def stream_background(y: np.ndarray,
+                      bg_path: Optional[str],
+                      bg_ir_path: Optional[str],
+                      bg_ir_gain_db: float,
+                      bg_gain_db: float,
+                      bg_hpf: float, bg_lpf: float,
+                      duck_db: float,
+                      seed: int,
+                      block_s: float = 10.0) -> np.ndarray:
+    if not _is_audio_path(bg_path): return y
+    total=len(y); out=np.copy(y); env=env_follow(y)
+    duck_lin=10**(float(duck_db)/20.0); g_bg=10**(float(bg_gain_db)/20.0)
+    rng = random.Random(int(seed) & 0x7fffffff)
+    try:
+        with sf.SoundFile(bg_path,"r") as f:
+            src_sr=f.samplerate
+            try:
+                total_frames = len(f)
+                if total_frames > 0:
+                    start_frame = rng.randint(0, max(0, total_frames-1))
+                    f.seek(start_frame)
+            except Exception:
+                pass
+            pos=0; block=int(block_s*SR)
+            prev_tail=None
+            while pos<total:
+                need=min(block,total-pos); src_need=int(np.ceil(need*src_sr/SR))
+                data=f.read(src_need,dtype="float32",always_2d=False)
+                if len(data)==0:
+                    # loop and re-randomize start when we wrap; smooth with short xfade
+                    try:
+                        total_frames = len(f)
+                        if total_frames > 0:
+                            new_start = rng.randint(0, max(0, total_frames-1))
+                            # prepare a tiny crossfade to avoid discontinuity
+                            f.seek(new_start)
+                            data=f.read(src_need,dtype="float32",always_2d=False)
+                            if len(data)==0: break
+                            # fallthrough to process
+                        else:
+                            f.seek(0); continue
+                    except Exception:
+                        f.seek(0); data=f.read(src_need,dtype="float32",always_2d=False)
+                        if len(data)==0: break
+                data=_mono_sr(data,src_sr,SR)[:need]
+                if prev_tail is not None and len(prev_tail)>0 and len(data)>0:
+                    # small xfade (20ms) between last block and new block
+                    xf = int(0.02*SR)
+                    head = data[:xf].copy()
+                    data[:xf] = _xfade(prev_tail[-xf:], head, xf)
+                if bg_ir_path: data=convolve_ir(data,bg_ir_path,bg_ir_gain_db)
+                data=hpf_lpf(data,bg_hpf,bg_lpf)
+                g_duck=duck_lin+(1.0-duck_lin)*(1.0-env[pos:pos+len(data)])
+                out[pos:pos+len(data)] += g_bg*data*g_duck
+                prev_tail = data[-int(0.02*SR):] if len(data)>=int(0.02*SR) else data
+                pos+=len(data)
+        return out.astype(np.float32)
+    except Exception:
+        return y
+
+# ───────────────────────── one-knob leveler ─────────────────────────
+def leveler(x: np.ndarray, amount: float) -> np.ndarray:
+    a=float(np.clip(amount,0.0,1.0))
+    if a<=0: return x
+    target_rms_db = -28.0 + 12.0*a
+    atk_ms = 10.0 - 6.0*a; rel_ms = 320.0 - 200.0*a
+    atk=max(1,int(SR*atk_ms/1000.0)); rel=max(1,int(SR*rel_ms/1000.0))
+    env=np.zeros_like(x,dtype=np.float32); g=0.0; ax=np.abs(x)+1e-9
+    for i,v in enumerate(ax):
+        g = (1-1/atk)*g + (1/atk)*v if v>g else (1-1/rel)*g + (1/rel)*v
+        env[i]=g
+    tgt=10**(target_rms_db/20.0); y=x*(tgt/(env+1e-9))
+    t=0.92 - 0.25*a
+    return (np.tanh(y/t)*t).astype(np.float32)
+
+# ───────────────────────── Opus round-trip (BUGFIX: no stray 'i') ─────────────────────────
+def opus_round_trip(in_wav_path: str, bitrate_kbps: float = 12.0, samplerate: int = SR) -> Optional[str]:
+    if not have_ffmpeg(): return None
+    key = hashlib.sha1(f"{in_wav_path}:{bitrate_kbps}:{samplerate}".encode()).hexdigest()
+    tmp_opus=os.path.join(TMP_DIR, f"vlab_{key}.opus")
+    tmp_out =os.path.join(TMP_DIR, f"vlab_{key}.wav")
+    if os.path.exists(tmp_out): return tmp_out
+    enc=["ffmpeg","-y","-hide_banner","-loglevel","error","-i",in_wav_path,"-c:a","libopus","-b:a",f"{int(bitrate_kbps)}k","-ar",str(samplerate),tmp_opus]
+    dec=["ffmpeg","-y","-hide_banner","-loglevel","error","-i",tmp_opus,"-ar",str(samplerate),tmp_out]
+    try:
+        pe=subprocess.run(enc,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        if pe.returncode!=0: raise RuntimeError(pe.stderr.decode(errors="ignore")[:400])
+        pd=subprocess.run(dec,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        if pd.returncode!=0: raise RuntimeError(pd.stderr.decode(errors="ignore")[:400])
+        return tmp_out if os.path.exists(tmp_out) else None
+    except Exception:
+        return None
+
+# ───────────────────────── OLD EFFECTS (EXACT behavior) ─────────────────────────
+# NOTE: Do not change these — requested to remain verbatim in behavior.
+
+def apply_stutter(x, amt, sr=SR):
+    if amt <= 0: return x
+    window = int(sr * 0.05)  # ~50ms
+    out = []
+    i = 0
+    while i < len(x):
+        chunk = x[i:i + window]
+        if random.random() < amt:
+            repeats = random.randint(1, 3)
+            for _ in range(repeats):
+                out.append(chunk)
+        else:
+            out.append(chunk)
+        i += window
+    return np.concatenate(out)[:len(x)]
+
+def apply_robotize(x, amt, sr=SR):
+    if amt <= 0: return x
+    fft_size = 1024
+    hop = fft_size // 4
+    phases = np.zeros(fft_size)
+    out = np.zeros(len(x) + fft_size)
+    for i in range(0, len(x) - fft_size, hop):
+        frame = x[i:i + fft_size] * np.hanning(fft_size)
+        spectrum = np.fft.fft(frame)
+        mag = np.abs(spectrum)
+        new_phase = phases + amt * np.pi
+        phases = new_phase
+        new_spectrum = mag * np.exp(1j * new_phase)
+        out[i:i + fft_size] += np.real(np.fft.ifft(new_spectrum)) * np.hanning(fft_size)
+    return out[:len(x)].astype(np.float32)
+
+def apply_mp3_sizzle(x, amt):
+    if amt <= 0: return x
+    noise = np.random.normal(0, amt * 0.01, size=x.shape).astype(np.float32)
+    return (x + noise).astype(np.float32)
+
+def apply_rf_noise(x, amt):
+    if amt <= 0: return x
+    noise = np.random.normal(0, amt * 0.02, size=x.shape).astype(np.float32)
+    return (x + noise).astype(np.float32)
+
+def apply_dropouts_exact(v: np.ndarray, drop_p: float, chunk_ms: float) -> np.ndarray:
+    if drop_p <= 0: return v
+    y = v.copy()
+    w = int(chunk_ms * SR / 1000.0)
+    if w < 4: w = 4
+    for i in range(0, len(y), w):
+        if random.random() < drop_p:
+            y[i:i + w] = 0.0
+    return y
+
+def apply_garble_exact(v: np.ndarray, prob: float, sr: int = SR) -> np.ndarray:
+    if prob <= 0: return v
+    gwin = int(0.06 * sr)
+    out = []
+    for i in range(0, len(v), gwin):
+        seg = v[i:i + gwin]
+        if random.random() < prob:
+            fac = 1.0 + random.uniform(-0.2, 0.2)
+            n = max(4, int(round(len(seg) / fac)))
+            a = resample_poly(seg, n, len(seg)).astype(np.float32)
+            seg = resample_poly(a, len(seg), n).astype(np.float32)
+        out.append(seg)
+    y = np.concatenate(out)
+    return y[:len(v)]
+
+# ───────────────────────── events (traffic/baby/dog) ─────────────────────────
+def _expand_files_with_warnings(spec) -> Tuple[List[str], List[str]]:
+    found, miss = [], []
+    if isinstance(spec,list):
+        for p in spec:
+            if isinstance(p,dict): p=p.get("name")
+            if _is_audio_path(p): found.append(p)
+            else: 
+                if p: miss.append(str(p))
+    elif isinstance(spec,str):
+        if os.path.isdir(spec):
+            for p in sorted(glob.glob(os.path.join(spec,"*"))):
+                if _is_audio_path(p): found.append(p)
+        elif _is_audio_path(spec): found.append(spec)
+        else: miss.append(str(spec))
+    return found, miss
+
+def _random_slice(y: np.ndarray, min_s: float, max_s: float, rng: random.Random) -> np.ndarray:
+    n=len(y); min_n=int(min_s*SR); max_n=int(max_s*SR)
+    if n<=min_n: return y[:min_n]
+    L=rng.randint(min_n, min(max_len:=max(max_n, min_n+1), n))
+    start=rng.randint(0, max(1, n-L))
+    return y[start:start+L]
+
+def place_events(xlen: int, files: List[str], events_per_min: float,
+                 vol_db: float, seed: int, min_len_s=0.8, max_len_s=2.0, max_overlap=0.5) -> np.ndarray:
+    out=np.zeros(xlen,dtype=np.float32)
+    if events_per_min<=0 or not files: return out
+    rng = random.Random(int(seed) & 0x7fffffff)
+    occ=np.zeros(xlen,dtype=np.uint8)
+    n_events=int(events_per_min*(xlen/SR)/60.0)
+    for _ in range(n_events):
+        f=rng.choice(files)
+        try:
+            s,sr=_load_audio(f); s=_mono_sr(s,sr,SR)
+            s=_random_slice(s,min_len_s,max_len_s,rng)
+            L=len(s)
+            if L>=xlen: start=0
+            else:
+                placed=False
+                for _try in range(4):
+                    start=rng.randint(0,xlen-L)
+                    overlap=occ[start:start+L].sum()/max(1,L)
+                    if overlap<=max_overlap: placed=True; break
+                if not placed: continue
+            end=start+L; fade=max(8,int(0.008*SR))  # RELIABILITY: larger fade to avoid clicks
+            win = fade_window(L, fade)
+            out[start:end]+= s*win * 10**(vol_db/20.0)
+            occ[start:end]=np.minimum(occ[start:end]+1,3)
+        except Exception:
+            continue
+    return out
+
+# ───────────────────────── main processor ─────────────────────────
+def process_audio(
+    mic_file,
+    # Source
+    dereverb_amt, dereverb_deep, src_hpf, src_lpf, leveler_amt,
+    # Room IR (pre)
+    room_ir_file, room_ir_gain_db,
+    # Background
+    bg_file, bg_ir_file, bg_ir_gain_db, bg_gain_db, bg_hpf, bg_lpf, bg_duck_db, seed,
+    # Phone color / codec
+    bandwidth_mode, opus_bitrate_kbps, post_mu_grit,
+    # Network artifacts (OLD — exact)
+    plc_ms, dropout_prob,
+    garble_prob, stutter_amt, robot_amt, mp3_amt, rf_amt,
+    # Handset IR (post)
+    handset_ir_file, handset_ir_gain_db,
+    # SFX events
+    traffic_files, traffic_ev_min, traffic_vol_db,
+    baby_files, baby_ev_min, baby_vol_db,
+    dog_files, dog_ev_min, dog_vol_db
+):
+    status_steps=[]
+    tmp_paths=[]
+
+    try:
+        # INPUT VALIDATION
+        mic_path=_safe_file(mic_file)
+        if not _is_audio_path(mic_path):
+            return None, "Error: missing/unsupported input file. Use WAV/MP3/FLAC/OGG/AIFF."
+
+        # duration caps
+        in_dur = _dur_seconds(mic_path)
+        if in_dur <= 0.0:
+            return None, "Error: could not read input audio."
+        if in_dur > 30*60:
+            return None, "Error: input too long (> 30 minutes)."
+
+        # clamp UI params (bounds checking)
+        dereverb_amt = float(np.clip(dereverb_amt, 0.0, 1.0))
+        dereverb_deep = bool(dereverb_deep)
+        src_hpf = float(np.clip(src_hpf, 0, 300))
+        src_lpf = float(np.clip(src_lpf, 2000, 20000))
+        leveler_amt = float(np.clip(leveler_amt, 0.0, 1.0))
+        room_ir_gain_db = float(np.clip(room_ir_gain_db, -24, 24))
+
+        bg_ir_gain_db = float(np.clip(bg_ir_gain_db, -24, 24))
+        bg_gain_db = float(np.clip(bg_gain_db, -60, 24))
+        bg_hpf = float(np.clip(bg_hpf, 0, 600))
+        bg_lpf = float(np.clip(bg_lpf, 20, 8000))   # lower bound 20 Hz (requested)
+        bg_duck_db = float(np.clip(bg_duck_db, -60, 0))
+        seed = int(np.clip(seed, 0, 2**31-1))
+
+        bandwidth_mode = "Wideband 80–7000" if bandwidth_mode not in ["Narrowband 300–3500","Wideband 80–7000"] else bandwidth_mode
+        opus_bitrate_kbps = float(np.clip(opus_bitrate_kbps, 6, 64))
+        post_mu_grit = float(np.clip(post_mu_grit, 0.0, 0.35))
+
+        plc_ms = float(np.clip(plc_ms, 20.0, 120.0))
+        dropout_prob = float(np.clip(dropout_prob, 0.0, 1.0))
+        garble_prob = float(np.clip(garble_prob, 0.0, 1.0))
+        stutter_amt = float(np.clip(stutter_amt, 0.0, 1.0))
+        robot_amt = float(np.clip(robot_amt, 0.0, 1.0))
+        mp3_amt = float(np.clip(mp3_amt, 0.0, 1.0))
+        rf_amt = float(np.clip(rf_amt, 0.0, 1.0))
+        handset_ir_gain_db = float(np.clip(handset_ir_gain_db, -24, 24))
+
+        traffic_ev_min = float(np.clip(traffic_ev_min, 0.0, 60.0))
+        traffic_vol_db = float(np.clip(traffic_vol_db, -60.0, 12.0))
+        baby_ev_min = float(np.clip(baby_ev_min, 0.0, 60.0))
+        baby_vol_db = float(np.clip(baby_vol_db, -60.0, 12.0))
+        dog_ev_min = float(np.clip(dog_ev_min, 0.0, 60.0))
+        dog_vol_db = float(np.clip(dog_vol_db, -60.0, 12.0))
+
+        status_steps.append("Input OK")
+
+        # LOAD
+        y,sr=_load_audio(mic_path); y=_mono_sr(y,sr,SR)
+        status_steps.append("Loaded input")
+
+        # 1) Source cleanup
+        if dereverb_amt>0:
+            y = dereverb_strong(y, dereverb_amt, dereverb_deep)
+        y=hpf_lpf(y, src_hpf, src_lpf)
+        y=leveler(y, leveler_amt)
+        status_steps.append("Source")
+
+        # 2) Room IR (pre-codec)
+        room_ir_p = _safe_file(room_ir_file)
+        if room_ir_p and _is_audio_path(room_ir_p) and _dur_seconds(room_ir_p) <= 2.0:
+            y = convolve_ir(y, room_ir_p, room_ir_gain_db)
+        elif room_ir_p:
+            status_steps.append("Room IR skipped (too long or unsupported)")
+        else:
+            status_steps.append("Room IR none")
+
+        # 3) Background bed
+        y = stream_background(
+            y,
+            _safe_file(bg_file),
+            _safe_file(bg_ir_file),
+            bg_ir_gain_db, bg_gain_db, bg_hpf, bg_lpf, bg_duck_db, seed
+        )
+        status_steps.append("Background")
+
+        # 4) Phone band-limit + codec baseline
+        if bandwidth_mode=="Narrowband 300–3500":
+            y=hpf_lpf(y, 300.0, 3500.0)
+        else:
+            y=hpf_lpf(y, 80.0, 7000.0)
+
+        tmp_in=_save_wav_tmp(y); tmp_paths.append(tmp_in)
+        coded = opus_round_trip(tmp_in, opus_bitrate_kbps, SR)
+        if coded:
+            yc,osr=_load_audio(coded); y=_mono_sr(yc,osr,SR)
+            codec_status=f"Opus {int(opus_bitrate_kbps)} kbps"
+        else:
+            mu=255.0; y=(np.sign(y)*np.log1p(mu*np.abs(y))/np.log1p(mu)).astype(np.float32)
+            codec_status="μ-law fallback"
+        if post_mu_grit>0:
+            a=float(np.clip(post_mu_grit,0.0,0.35)); mu=255.0
+            comp=np.sign(y)*np.log1p(mu*np.abs(y))/np.log1p(mu)
+            y=((1.0-a)*y + a*comp).astype(np.float32)
+        status_steps.append(f"Codec [{codec_status}]")
+
+        # 5) OLD Network artifacts — EXACT behavior
+        y = apply_garble_exact(y, garble_prob, SR)                    # exact old
+        y = apply_dropouts_exact(y, dropout_prob, plc_ms)             # exact old
+        y = apply_stutter(y, stutter_amt, SR)                         # exact old
+        y = apply_robotize(y, robot_amt, SR)                          # exact old
+        y = apply_mp3_sizzle(y, mp3_amt)                              # exact old
+        y = apply_rf_noise(y, rf_amt)                                 # exact old
+        status_steps.append("Artifacts")
+
+        # 6) Handset IR (post)
+        handset_ir_p = _safe_file(handset_ir_file)
+        if handset_ir_p and _is_audio_path(handset_ir_p) and _dur_seconds(handset_ir_p) <= 2.0:
+            y = convolve_ir(y, handset_ir_p, handset_ir_gain_db)
+            status_steps.append("Handset IR")
+        elif handset_ir_p:
+            status_steps.append("Handset IR skipped (too long or unsupported)")
+        else:
+            status_steps.append("Handset IR none")
+
+        # 7) Events (seeded)
+        xlen=len(y)
+        traf_ok,_ = _expand_files_with_warnings(_coerce_paths_list(traffic_files))
+        baby_ok,_ = _expand_files_with_warnings(_coerce_paths_list(baby_files))
+        dog_ok,_  = _expand_files_with_warnings(_coerce_paths_list(dog_files))
+        y += place_events(xlen, traf_ok, traffic_ev_min, traffic_vol_db, seed)
+        y += place_events(xlen, baby_ok,  baby_ev_min,  baby_vol_db,  seed+1)
+        y += place_events(xlen, dog_ok,   dog_ev_min,   dog_vol_db,   seed+2)
+        status_steps.append("Events")
+
+        # 8) Normalize
+        y = normalize_peak(y, 0.97)
+        out_path = _save_wav_tmp(y); tmp_paths.append(out_path)
+        status_steps.append("Normalize")
+
+        return out_path, " · ".join(status_steps)
+
+    except Exception as e:
+        # CLEANUP ON FAILURE
+        for p in tmp_paths:
+            try:
+                if p and os.path.exists(p): os.remove(p)
+            except Exception:
+                pass
+        return None, f"Error: {type(e).__name__}: {str(e)[:300]}"
+
+# ───────────────────────── presets I/O ─────────────────────────
+def load_presets() -> Dict[str, Any]:
+    def _blank(): return {"schema":1,"presets":{}}
+    try:
+        if not os.path.exists(PRESETS_PATH): return _blank()
+        with open(PRESETS_PATH,"r") as f: j=json.load(f)
+        if not isinstance(j,dict): return _blank()
+        j.setdefault("schema",1); j.setdefault("presets",{})
+        return j
+    except Exception: return _blank()
+
+def save_presets(obj: Dict[str, Any]):
+    try:
+        with open(PRESETS_PATH,"w") as f: json.dump(obj,f,indent=2)
+    except Exception: pass
+
+# ───────────────────────── UI ─────────────────────────
+def create_app():
+    theme = gr.themes.Soft(primary_hue="purple", secondary_hue="violet")
+    with gr.Blocks(title="VoiceLab FX — Editor", theme=theme) as demo:
+        gr.Markdown("## VoiceLab FX — Editor (Exact Old FX + Reliability Fixes)")
+        gr.Markdown(f"**ffmpeg:** {'✅ Found' if have_ffmpeg() else '⚠️ Not found — μ-law fallback only'}")
+
+        prs_state = gr.State(load_presets())
+
+        with gr.Row():
+            mic = gr.Audio(sources=["upload"], type="filepath", label="Input (WAV/MP3/FLAC/OGG/AIFF)")
+            out = gr.Audio(type="filepath", label="Processed Output")
+
+        # Presets
+        with gr.Row():
+            preset_dd = gr.Dropdown(
+                choices=sorted(prs_state.value["presets"].keys()) or ["Default"],
+                value=(sorted(prs_state.value["presets"].keys())[0] if prs_state.value["presets"] else "Default"),
+                label="Preset"
+            )
+            preset_name = gr.Textbox(label="Save as…")
+            btn_save = gr.Button("💾 Save/Overwrite Preset", variant="primary")
+            btn_reload = gr.Button("🔄 Reload presets.json")
+
+        with gr.Tab("Source"):
+            dereverb = gr.Slider(0.0, 1.0, 0.6, step=0.01, label="Reduce Reverb (strong)")
+            dereverb_deep = gr.Checkbox(value=False, label="Deep (extra pass)")
+            src_hpf = gr.Slider(0, 300, 0, step=10, label="Source HPF (Hz)")
+            src_lpf = gr.Slider(2000, 20000, 20000, step=100, label="Source LPF (Hz)")
+            leveler_amt = gr.Slider(0.0, 1.0, 0.6, step=0.01, label="Leveler (one-knob)")
+
+        with gr.Tab("Room IR (pre-codec)"):
+            room_ir = gr.File(label="Room IR (≤2s WAV)")
+            room_ir_gain = gr.Slider(-24, 24, 0, step=0.5, label="Room IR Gain (dB)")
+
+        with gr.Tab("Background"):
+            bg_file = gr.File(label="Background bed")
+            bg_ir_file = gr.File(label="Background IR (≤2s)")
+            bg_ir_gain = gr.Slider(-24, 24, 0, step=0.5, label="Background IR Gain (dB)")
+            bg_gain = gr.Slider(-60, 24, -14, step=0.5, label="Background Volume (dB)")
+            bg_duck = gr.Slider(-60, 0, -12, step=1, label="Background Ducking (dB)")
+            bg_hpf = gr.Slider(0, 600, 0, step=10, label="Background HPF (Hz)")
+            bg_lpf = gr.Slider(20, 8000, 1800, step=10, label="Background LPF (Hz)")
+            seed = gr.Slider(0, 2**31-1, 1337, step=1, label="Seed (BG start & events)")
+
+        with gr.Tab("Phone Color"):
+            bandwidth = gr.Radio(choices=["Narrowband 300–3500","Wideband 80–7000"], value="Narrowband 300–3500", label="Bandwidth")
+            opus_br = gr.Slider(6, 64, 12, step=1, label="Opus Bitrate (kbps)")
+            post_mu = gr.Slider(0.0, 0.35, 0.0, step=0.01, label="Extra μ-law Grit (post-codec)")
+
+        with gr.Tab("Network Artifacts (EXACT old)"):
+            plc_ms = gr.Slider(20.0, 120.0, 60.0, step=5.0, label="Segment size (ms) for drop/garble")
+            dropout_prob = gr.Slider(0.0, 1.0, 0.12, step=0.01, label="Dropout probability / segment")
+            with gr.Row():
+                garble_p  = gr.Slider(0.0, 1.0, 0.50, step=0.01, label="Garble Probability")
+                stutter_a = gr.Slider(0.0, 1.0, 0.50, step=0.01, label="Stutter Amount")
+                robot_a   = gr.Slider(0.0, 1.0, 0.20, step=0.01, label="Robot Amount")
+            with gr.Row():
+                mp3_a     = gr.Slider(0.0, 1.0, 0.00, step=0.01, label="MP3 Sizzle")
+                rf_a      = gr.Slider(0.0, 1.0, 0.00, step=0.01, label="RF Noise")
+
+        with gr.Tab("Handset IR (post-codec)"):
+            handset_ir = gr.File(label="Handset/Speaker IR (≤2s)")
+            handset_ir_gain = gr.Slider(-24, 24, 0, step=0.5, label="Handset IR Gain (dB)")
+
+        with gr.Tab("SFX Generators"):
+            traf_files = gr.File(file_count="multiple", label="Traffic (horns/sirens/streets)")
+            traf_ev = gr.Slider(0, 60, 4, step=0.5, label="Traffic events/min")
+            traf_vol = gr.Slider(-60, 12, -6, step=1, label="Traffic vol (dB)")
+            baby_files = gr.File(file_count="multiple", label="Baby files")
+            baby_ev = gr.Slider(0, 60, 3, step=0.5, label="Baby events/min")
+            baby_vol = gr.Slider(-60, 12, -8, step=1, label="Baby vol (dB)")
+            dog_files = gr.File(file_count="multiple", label="Dog files")
+            dog_ev = gr.Slider(0, 60, 3, step=0.5, label="Dog events/min")
+            dog_vol = gr.Slider(-60, 12, -8, step=1, label="Dog vol (dB)")
+
+        status = gr.Textbox(label="Status", interactive=False)
+        run = gr.Button("⚙️ Process", variant="primary")
+
+        run.click(
+            process_audio,
+            inputs=[
+                mic,
+                dereverb, dereverb_deep, src_hpf, src_lpf, leveler_amt,
+                room_ir, room_ir_gain,
+                bg_file, bg_ir_file, bg_ir_gain, bg_gain, bg_hpf, bg_lpf, bg_duck, seed,
+                bandwidth, opus_br, post_mu,
+                plc_ms, dropout_prob,
+                garble_p, stutter_a, robot_a, mp3_a, rf_a,
+                handset_ir, handset_ir_gain,
+                traf_files, traf_ev, traf_vol,
+                baby_files, baby_ev, baby_vol,
+                dog_files, dog_ev, dog_vol
+            ],
+            outputs=[out, status]
+        )
+
+        # Presets (BUGFIX: use prs_state instead of gr.State.value)
+        def on_save(pstate, name, *vals):
+            name = (name or "Untitled").strip()
+            keys = [
+                "dereverb","dereverb_deep","src_hpf","src_lpf","leveler_amt",
+                "room_ir_gain",
+                "bg_ir_gain","bg_gain","bg_hpf","bg_lpf","bg_duck","seed",
+                "bandwidth","opus_br","post_mu",
+                "plc_ms","dropout_prob",
+                "garble_p","stutter_a","robot_a","mp3_a","rf_a",
+                "handset_ir_gain",
+                "traf_ev","traf_vol","baby_ev","baby_vol","dog_ev","dog_vol"
+            ]
+            cfg = dict(zip(keys, vals))
+            p = dict(pstate); p.setdefault("schema",1); p.setdefault("presets",{})
+            p["presets"][name] = cfg
+            save_presets(p)
+            dd = gr.Dropdown(choices=sorted(p["presets"].keys()), value=name)
+            return p, dd, f"Saved '{name}'."
+
+        btn_save.click(
+            on_save,
+            inputs=[prs_state, preset_name,
+                    dereverb, dereverb_deep, src_hpf, src_lpf, leveler_amt,
+                    room_ir_gain,
+                    bg_ir_gain, bg_gain, bg_hpf, bg_lpf, bg_duck, seed,
+                    bandwidth, opus_br, post_mu,
+                    plc_ms, dropout_prob,
+                    garble_p, stutter_a, robot_a, mp3_a, rf_a,
+                    handset_ir_gain,
+                    traf_ev, traf_vol, baby_ev, baby_vol, dog_ev, dog_vol],
+            outputs=[prs_state, preset_dd, status]
+        )
+
+        def on_reload():
+            p = load_presets()
+            dd = gr.Dropdown(choices=sorted(p["presets"].keys()) or ["Default"],
+                             value=(sorted(p["presets"].keys())[0] if p["presets"] else "Default"))
+            return p, dd, "Presets reloaded."
+
+        btn_reload.click(on_reload, outputs=[prs_state, preset_dd, status])
+
+        def on_choose(pstate, name):
+            cfg = pstate["presets"].get(name, {})
+            def v(k,d): return cfg.get(k,d)
+            return (
+                gr.update(value=v("dereverb",0.6)),
+                gr.update(value=v("dereverb_deep",False)),
+                gr.update(value=v("src_hpf",0.0)),
+                gr.update(value=v("src_lpf",20000.0)),
+                gr.update(value=v("leveler_amt",0.6)),
+
+                gr.update(value=v("room_ir_gain",0.0)),
+
+                gr.update(value=v("bg_ir_gain",0.0)),
+                gr.update(value=v("bg_gain",-14.0)),
+                gr.update(value=v("bg_hpf",0.0)),
+                gr.update(value=v("bg_lpf",1800.0)),
+                gr.update(value=v("bg_duck",-12.0)),
+                gr.update(value=v("seed",1337)),
+
+                gr.update(value=v("bandwidth","Narrowband 300–3500")),
+                gr.update(value=v("opus_br",12.0)),
+                gr.update(value=v("post_mu",0.0)),
+
+                gr.update(value=v("plc_ms",60.0)),
+                gr.update(value=v("dropout_prob",0.12)),
+
+                gr.update(value=v("garble_p",0.50)),
+                gr.update(value=v("stutter_a",0.50)),
+                gr.update(value=v("robot_a",0.20)),
+                gr.update(value=v("mp3_a",0.00)),
+                gr.update(value=v("rf_a",0.00)),
+
+                gr.update(value=v("handset_ir_gain",0.0)),
+
+                gr.update(value=v("traf_ev",4.0)),
+                gr.update(value=v("traf_vol",-6.0)),
+                gr.update(value=v("baby_ev",3.0)),
+                gr.update(value=v("baby_vol",-8.0)),
+                gr.update(value=v("dog_ev",3.0)),
+                gr.update(value=v("dog_vol",-8.0))
+            )
+        preset_dd.change(on_choose, inputs=[prs_state, preset_dd],
+                         outputs=[dereverb, dereverb_deep, src_hpf, src_lpf, leveler_amt,
+                                  room_ir_gain,
+                                  bg_ir_gain, bg_gain, bg_hpf, bg_lpf, bg_duck, seed,
+                                  bandwidth, opus_br, post_mu,
+                                  plc_ms, dropout_prob,
+                                  garble_p, stutter_a, robot_a, mp3_a, rf_a,
+                                  handset_ir_gain,
+                                  traf_ev, traf_vol, baby_ev, baby_vol, dog_ev, dog_vol])
+
+    return demo
+
+if __name__=="__main__":
+    app = create_app()
+    app.queue(default_concurrency_limit=4).launch(server_name="0.0.0.0", server_port=7860)
+What changed (per your instructions, without touching FX behavior)
+	•	FFmpeg command fixed (no stray "i" token).
+	•	Preset save wiring fixed (uses prs_state, not gr.State.value).
+	•	Validation: checks file types; IRs hard-capped at ≤2s; input length ≤30m; clamps all slider params.
+	•	Error handling: clearer status showing each step; friendlier upload errors; graceful skips for missing/oversized IR/background.
+	•	Memory/cleanup: temp files tracked and removed on failure; background reads in blocks; cached tmp gets purged over time.
+	•	Audio quality: event fades enlarged to avoid clicks; background looping has short crossfades to remove discontinuities; background bed random-start preserved.
+Run it and tell me: does garble/robot now behave like your old app at the same values? If anything still diverges, we’ll pinpoint that exact function call wiring.
+
+
+
+
+
+
+
+
+
+ChatGPT can make mistakes. Check important info.

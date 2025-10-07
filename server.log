@@ -1,0 +1,15 @@
+ * Serving Flask app 'app'
+ * Debug mode: off
+2025-09-22 11:40:03,898 INFO [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.1.110:5001
+2025-09-22 11:40:03,898 INFO [33mPress CTRL+C to quit[0m
+2025-09-22 11:40:20,158 INFO [req:18d67a4e2ba04f59986221dae198748b] Processed preset | {'preset': 'Street Sounds', 'duration_ms': 5577, 'ambience_file': 'assets/ambience/street_B.wav'}
+2025-09-22 11:40:20,159 INFO 127.0.0.1 - - [22/Sep/2025 11:40:20] "POST /process HTTP/1.1" 200 -
+2025-09-22 11:40:28,859 INFO [req:2e5b756c039d44678e151c8acef2b15c] Processed preset | {'preset': 'Street Sounds', 'duration_ms': 5608, 'ambience_file': 'assets/ambience/street_C.wav'}
+2025-09-22 11:40:28,861 INFO 127.0.0.1 - - [22/Sep/2025 11:40:28] "POST /process HTTP/1.1" 200 -
+2025-09-22 11:40:38,248 INFO [req:052ccbec51224c71922708c0f208dd09] Processed preset | {'preset': 'Spotty Service (Improved)', 'duration_ms': 5474}
+2025-09-22 11:40:38,250 INFO 127.0.0.1 - - [22/Sep/2025 11:40:38] "POST /process HTTP/1.1" 200 -
+2025-09-22 11:40:46,961 INFO [req:b71e15b57b2f4fcc9c03af2d7c9b5e08] Processed preset | {'preset': 'Cellphone (Plain Call)', 'duration_ms': 5453}
+2025-09-22 11:40:46,966 INFO 127.0.0.1 - - [22/Sep/2025 11:40:46] "POST /process HTTP/1.1" 200 -

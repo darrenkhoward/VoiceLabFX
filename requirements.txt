@@ -1,0 +1,6 @@
+gradio==4.20.0
+numpy
+scipy
+soundfile
+noisereduce
+pyloudnorm

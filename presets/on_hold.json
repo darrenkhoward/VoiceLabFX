@@ -1,0 +1,10 @@
+{
+  "name": "on_hold",
+  "eq": {
+    "low": 400,
+    "high": 3200
+  },
+  "reverb": "office_room_ir.wav",
+  "ambience": "soft_hold_music.wav",
+  "output_sr": 22050
+}

@@ -1,0 +1,871 @@
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % pip install flask pydub numpy
+brew install ffmpeg   # (if you’re on Mac; if you’re on Windows, use `choco install ffmpeg`)
+
+zsh: parse error near `)'
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % pip install flask pydub numpy
+
+Requirement already satisfied: flask in /Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages (3.1.0)
+Requirement already satisfied: pydub in /Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages (0.25.1)
+Requirement already satisfied: numpy in /Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages (1.26.4)
+Requirement already satisfied: Werkzeug>=3.1 in /Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages (from flask) (3.1.3)
+Requirement already satisfied: Jinja2>=3.1.2 in /Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages (from flask) (3.1.6)
+Requirement already satisfied: itsdangerous>=2.2 in /Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages (from flask) (2.2.0)
+Requirement already satisfied: click>=8.1.3 in /Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages (from flask) (8.1.8)
+Requirement already satisfied: blinker>=1.9 in /Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages (from flask) (1.9.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages (from Jinja2>=3.1.2->flask) (3.0.2)
+
+[notice] A new release of pip is available: 25.1.1 -> 25.2
+[notice] To update, run: pip install --upgrade pip
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % brew install ffmpeg
+
+==> Auto-updating Homebrew...
+Adjust how often this is run with `$HOMEBREW_AUTO_UPDATE_SECS` or disable with
+`$HOMEBREW_NO_AUTO_UPDATE=1`. Hide these hints with `$HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+==> Auto-updated Homebrew!
+Updated 1 tap (ngrok/ngrok).
+
+You have 54 outdated formulae and 1 outdated cask installed.
+
+ffmpeg 7.1.1_3 is already installed but outdated (so it will be upgraded).
+Warning: You are using macOS 13.
+We (and Apple) do not provide support for this old version.
+
+This is a Tier 3 configuration:
+  https://docs.brew.sh/Support-Tiers#tier-3
+You can report Tier 3 unrelated issues to Homebrew/* repositories!
+Read the above document instead before opening any issues or PRs.
+
+==> Fetching downloads for: ffmpeg
+==> Downloading https://ghcr.io/v2/homebrew/core/ffmpeg/manifests/8.
+############################################################# 100.0%
+==> Fetching dependencies for ffmpeg: cmake, openjph, gnu-sed, pkgconf, fontconfig, nettle, ninja, lzip, expat, meson, unbound, gnutls, pcre2, pixman, bison, gobject-introspection, harfbuzz, libass, libudfread, libbluray, libmicrohttpd, mbedtls, libssh, libogg, libvpx, doxygen, mpg123, svt-av1, pango, theora, x264, zeromq and zimg
+==> Downloading https://ghcr.io/v2/homebrew/core/cmake/manifests/4.1
+############################################################# 100.0%
+==> Fetching cmake
+==> Downloading https://ghcr.io/v2/homebrew/core/cmake/blobs/sha256:
+############################################################# 100.0%
+==> Downloading https://raw.githubusercontent.com/Homebrew/homebrew-
+############################################################# 100.0%
+==> Fetching dependencies for openjph: jpeg-turbo and libtiff
+==> Downloading https://ghcr.io/v2/homebrew/core/jpeg-turbo/manifest
+############################################################# 100.0%
+==> Fetching jpeg-turbo
+==> Downloading https://ghcr.io/v2/homebrew/core/jpeg-turbo/blobs/sh
+############################################################# 100.0%
+==> Downloading https://raw.githubusercontent.com/Homebrew/homebrew-
+############################################################# 100.0%
+==> Fetching libtiff
+==> Downloading https://download.osgeo.org/libtiff/tiff-4.7.1.tar.gz
+############################################################# 100.0%
+==> Fetching openjph
+==> Downloading https://github.com/aous72/OpenJPH/archive/refs/tags/
+==> Downloading from https://codeload.github.com/aous72/OpenJPH/tar.
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/gnu-sed/manifests/4
+############################################################# 100.0%
+==> Fetching gnu-sed
+==> Downloading https://ghcr.io/v2/homebrew/core/gnu-sed/blobs/sha25
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/pkgconf/manifests/2
+############################################################# 100.0%
+==> Fetching pkgconf
+==> Downloading https://ghcr.io/v2/homebrew/core/pkgconf/blobs/sha25
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/fontconfig/manifest
+############################################################# 100.0%
+==> Fetching fontconfig
+==> Downloading https://ghcr.io/v2/homebrew/core/fontconfig/blobs/sh
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/nettle/manifests/3.
+############################################################# 100.0%
+==> Fetching nettle
+==> Downloading https://ghcr.io/v2/homebrew/core/nettle/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/ninja/manifests/1.1
+############################################################# 100.0%
+==> Fetching ninja
+==> Downloading https://ghcr.io/v2/homebrew/core/ninja/blobs/sha256:
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/lzip/manifests/1.25
+############################################################# 100.0%
+==> Fetching lzip
+==> Downloading https://ghcr.io/v2/homebrew/core/lzip/blobs/sha256:f
+############################################################# 100.0%
+==> Downloading https://raw.githubusercontent.com/Homebrew/homebrew-
+############################################################# 100.0%
+==> Installing expat dependency: lzip
+==> Downloading https://ghcr.io/v2/homebrew/core/lzip/manifests/1.25
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/b160c19a9c2ca68b874526eefa5250e8100b5ed6576feb2be4f7c81769b68842--lzip-1.25.bottle_manifest.json
+==> Pouring lzip--1.25.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/lzip/1.25: 11 files, 237.5KB
+==> Fetching expat
+==> Downloading https://github.com/libexpat/libexpat/releases/downlo
+==> Downloading from https://release-assets.githubusercontent.com/gi
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/meson/manifests/1.9
+############################################################# 100.0%
+==> Fetching dependencies for meson: ca-certificates and expat
+==> Downloading https://ghcr.io/v2/homebrew/core/ca-certificates/man
+############################################################# 100.0%
+==> Fetching ca-certificates
+==> Downloading https://ghcr.io/v2/homebrew/core/ca-certificates/blo
+############################################################# 100.0%
+==> Fetching meson
+==> Downloading https://ghcr.io/v2/homebrew/core/meson/blobs/sha256:
+############################################################# 100.0%
+==> Downloading https://raw.githubusercontent.com/Homebrew/homebrew-
+############################################################# 100.0%
+==> Fetching dependencies for unbound: libnghttp2
+==> Downloading https://raw.githubusercontent.com/Homebrew/homebrew-
+############################################################# 100.0%
+==> Fetching libnghttp2
+==> Downloading https://github.com/nghttp2/nghttp2/releases/download
+==> Downloading from https://release-assets.githubusercontent.com/gi
+############################################################# 100.0%
+==> Fetching unbound
+==> Downloading https://nlnetlabs.nl/downloads/unbound/unbound-1.24.
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/gnutls/manifests/3.
+############################################################# 100.0%
+==> Fetching dependencies for gnutls: expat
+==> Fetching gnutls
+==> Downloading https://ghcr.io/v2/homebrew/core/gnutls/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/pcre2/manifests/10.
+############################################################# 100.0%
+==> Fetching pcre2
+==> Downloading https://ghcr.io/v2/homebrew/core/pcre2/blobs/sha256:
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/pixman/manifests/0.
+############################################################# 100.0%
+==> Fetching pixman
+==> Downloading https://ghcr.io/v2/homebrew/core/pixman/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/bison/manifests/3.8
+############################################################# 100.0%
+==> Fetching bison
+==> Downloading https://ghcr.io/v2/homebrew/core/bison/blobs/sha256:
+############################################################# 100.0%
+==> Downloading https://raw.githubusercontent.com/Homebrew/homebrew-
+############################################################# 100.0%
+==> Fetching dependencies for gobject-introspection: freetype, glib and expat
+==> Downloading https://raw.githubusercontent.com/Homebrew/homebrew-
+############################################################# 100.0%
+==> Fetching freetype
+==> Downloading https://downloads.sourceforge.net/project/freetype/f
+==> Downloading from https://cytranet-dal.dl.sourceforge.net/project
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/glib/manifests/2.86
+############################################################# 100.0%
+==> Fetching glib
+==> Downloading https://ghcr.io/v2/homebrew/core/glib/blobs/sha256:0
+############################################################# 100.0%
+==> Fetching gobject-introspection
+==> Downloading https://files.pythonhosted.org/packages/9e/38/bd5b78
+############################################################# 100.0%
+==> Downloading https://files.pythonhosted.org/packages/8d/37/02347f
+############################################################# 100.0%
+==> Downloading https://files.pythonhosted.org/packages/b2/97/5d4248
+############################################################# 100.0%
+==> Downloading https://files.pythonhosted.org/packages/18/5d/3bf57d
+############################################################# 100.0%
+==> Downloading https://download.gnome.org/sources/gobject-introspec
+############################################################# 100.0%
+==> Downloading https://raw.githubusercontent.com/Homebrew/homebrew-
+############################################################# 100.0%
+==> Fetching dependencies for harfbuzz: freetype, expat and gobject-introspection
+==> Fetching harfbuzz
+==> Downloading https://github.com/harfbuzz/harfbuzz/archive/refs/ta
+==> Downloading from https://codeload.github.com/harfbuzz/harfbuzz/t
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/libass/manifests/0.
+############################################################# 100.0%
+==> Fetching dependencies for libass: expat and gobject-introspection
+==> Fetching libass
+==> Downloading https://ghcr.io/v2/homebrew/core/libass/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/libudfread/manifest
+############################################################# 100.0%
+==> Fetching libudfread
+==> Downloading https://ghcr.io/v2/homebrew/core/libudfread/blobs/sh
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/libbluray/manifests
+############################################################# 100.0%
+==> Fetching libbluray
+==> Downloading https://ghcr.io/v2/homebrew/core/libbluray/blobs/sha
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/libmicrohttpd/manif
+############################################################# 100.0%
+==> Fetching dependencies for libmicrohttpd: expat
+==> Fetching libmicrohttpd
+==> Downloading https://ghcr.io/v2/homebrew/core/libmicrohttpd/blobs
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/mbedtls/manifests/3
+############################################################# 100.0%
+==> Fetching mbedtls
+==> Downloading https://ghcr.io/v2/homebrew/core/mbedtls/blobs/sha25
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/libssh/manifests/0.
+############################################################# 100.0%
+==> Fetching libssh
+==> Downloading https://ghcr.io/v2/homebrew/core/libssh/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/libogg/manifests/1.
+############################################################# 100.0%
+==> Fetching libogg
+==> Downloading https://ghcr.io/v2/homebrew/core/libogg/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/libvpx/manifests/1.
+############################################################# 100.0%
+==> Fetching libvpx
+==> Downloading https://ghcr.io/v2/homebrew/core/libvpx/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/doxygen/manifests/1
+############################################################# 100.0%
+==> Fetching doxygen
+==> Downloading https://ghcr.io/v2/homebrew/core/doxygen/blobs/sha25
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/mpg123/manifests/1.
+############################################################# 100.0%
+==> Fetching mpg123
+==> Downloading https://ghcr.io/v2/homebrew/core/mpg123/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/svt-av1/manifests/3
+############################################################# 100.0%
+==> Fetching svt-av1
+==> Downloading https://ghcr.io/v2/homebrew/core/svt-av1/blobs/sha25
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/pango/manifests/1.5
+############################################################# 100.0%
+==> Fetching dependencies for pango: expat, gobject-introspection and harfbuzz
+==> Fetching pango
+==> Downloading https://ghcr.io/v2/homebrew/core/pango/blobs/sha256:
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/theora/manifests/1.
+############################################################# 100.0%
+==> Fetching theora
+==> Downloading https://ghcr.io/v2/homebrew/core/theora/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/x264/manifests/r322
+############################################################# 100.0%
+==> Fetching x264
+==> Downloading https://ghcr.io/v2/homebrew/core/x264/blobs/sha256:2
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/zeromq/manifests/4.
+############################################################# 100.0%
+==> Fetching zeromq
+==> Downloading https://ghcr.io/v2/homebrew/core/zeromq/blobs/sha256
+############################################################# 100.0%
+==> Downloading https://ghcr.io/v2/homebrew/core/zimg/manifests/3.0.
+############################################################# 100.0%
+==> Fetching zimg
+==> Downloading https://ghcr.io/v2/homebrew/core/zimg/blobs/sha256:9
+############################################################# 100.0%
+==> Installing ffmpeg dependency: lzip
+==> Downloading https://ghcr.io/v2/homebrew/core/lzip/manifests/1.25
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/b160c19a9c2ca68b874526eefa5250e8100b5ed6576feb2be4f7c81769b68842--lzip-1.25.bottle_manifest.json
+==> Fetching dependencies for ffmpeg: openjph, expat, unbound, gobject-introspection and harfbuzz
+==> Fetching ffmpeg
+==> Downloading https://ghcr.io/v2/homebrew/core/ffmpeg/blobs/sha256
+############################################################# 100.0%
+==> Upgrading ffmpeg
+  7.1.1_3 -> 8.0_1 
+==> Installing dependencies for ffmpeg: cmake, openjph, gnu-sed, pkgconf, fontconfig, nettle, ninja, expat, meson, unbound, gnutls, pcre2, pixman, bison, gobject-introspection, harfbuzz, libass, libudfread, libbluray, libmicrohttpd, mbedtls, libssh, libogg, libvpx, doxygen, mpg123, svt-av1, pango, theora, x264, zeromq and zimg
+==> Installing ffmpeg dependency: cmake
+==> Downloading https://ghcr.io/v2/homebrew/core/cmake/manifests/4.1
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/24af49775f385da509b31f6d086bd8d16010984c687b5b0c3935a8fee72a1ad8--cmake-4.1.1.bottle_manifest.json
+==> Pouring cmake--4.1.1.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/cmake/4.1.1: 3,913 files, 59.2MB
+==> Installing ffmpeg dependency: openjph
+Warning: A newer Command Line Tools release is available.
+Update them from Software Update in System Settings.
+
+If that doesn't show you any updates, run:
+  sudo rm -rf /Library/Developer/CommandLineTools
+  sudo xcode-select --install
+
+Alternatively, manually download them from:
+  https://developer.apple.com/download/all/.
+You should download the Command Line Tools for Xcode 15.2.
+
+
+
+This is a Tier 2 configuration:
+  https://docs.brew.sh/Support-Tiers#tier-2
+You can report Tier 2 unrelated issues to Homebrew/* repositories!
+Read the above document instead before opening any issues or PRs.
+
+==> Installing dependencies for openjph: jpeg-turbo and libtiff
+==> Installing openjph dependency: jpeg-turbo
+==> Downloading https://ghcr.io/v2/homebrew/core/jpeg-turbo/manifest
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/7906b64a3cf726a3ad0a5ca8dd12c925b0104749a7f6288197955a95239257d5--jpeg-turbo-3.1.2.bottle_manifest.json
+==> Pouring jpeg-turbo--3.1.2.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/jpeg-turbo/3.1.2: 47 files, 3.5MB
+==> Installing openjph dependency: libtiff
+Warning: A newer Command Line Tools release is available.
+Update them from Software Update in System Settings.
+
+If that doesn't show you any updates, run:
+  sudo rm -rf /Library/Developer/CommandLineTools
+  sudo xcode-select --install
+
+Alternatively, manually download them from:
+  https://developer.apple.com/download/all/.
+You should download the Command Line Tools for Xcode 15.2.
+
+
+
+This is a Tier 2 configuration:
+  https://docs.brew.sh/Support-Tiers#tier-2
+You can report Tier 2 unrelated issues to Homebrew/* repositories!
+Read the above document instead before opening any issues or PRs.
+
+==> ./configure --disable-webp --enable-zstd --enable-lzma --with-jp
+==> make install
+🍺  /opt/homebrew/Cellar/libtiff/4.7.1: 488 files, 8.4MB, built in 25 seconds
+==> Installing openjph
+==> cmake -S . -B build -DCMAKE_INSTALL_RPATH=@loader_path/../lib
+==> cmake --build build
+==> cmake --install build
+🍺  /opt/homebrew/Cellar/openjph/0.23.1: 25 files, 552KB, built in 5 seconds
+==> Installing ffmpeg dependency: gnu-sed
+==> Downloading https://ghcr.io/v2/homebrew/core/gnu-sed/manifests/4
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/593980c8b4be8904de2f431575ef35e9088505050fa2ed84d7973fd3bffd180b--gnu-sed-4.9-3.bottle_manifest.json
+==> Pouring gnu-sed--4.9.arm64_ventura.bottle.3.tar.gz
+🍺  /opt/homebrew/Cellar/gnu-sed/4.9: 13 files, 616.4KB
+==> Installing ffmpeg dependency: pkgconf
+==> Downloading https://ghcr.io/v2/homebrew/core/pkgconf/manifests/2
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/e0bf05fafcedcfbde9a9a488dc3a083cadd19584ac19f4cc053a9c265f841120--pkgconf-2.5.1.bottle_manifest.json
+==> Pouring pkgconf--2.5.1.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/pkgconf/2.5.1: 28 files, 521.4KB
+==> Installing ffmpeg dependency: fontconfig
+==> Downloading https://ghcr.io/v2/homebrew/core/fontconfig/manifest
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/e53a8e68cd621f68ec95803ef9b8e6c8a4b6539c3a73b3da85788a6ab9da7606--fontconfig-2.17.1-1.bottle_manifest.json
+==> Pouring fontconfig--2.17.1.arm64_ventura.bottle.1.tar.gz
+==> Regenerating font cache, this may take a while
+==> /opt/homebrew/Cellar/fontconfig/2.17.1/bin/fc-cache --force --re
+🍺  /opt/homebrew/Cellar/fontconfig/2.17.1: 98 files, 1.5MB
+==> Installing ffmpeg dependency: nettle
+==> Downloading https://ghcr.io/v2/homebrew/core/nettle/manifests/3.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/ae7ec4f96568de46d1b75681840eb8f4af11a1b72611fbf8e7c6a6fc9efcb2da--nettle-3.10.2.bottle_manifest.json
+==> Pouring nettle--3.10.2.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/nettle/3.10.2: 96 files, 2.8MB
+==> Installing ffmpeg dependency: ninja
+==> Downloading https://ghcr.io/v2/homebrew/core/ninja/manifests/1.1
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/2f065296a9af5c75431078b3c4c8618e8980ceae48dc55013ae0f14dcb6e9925--ninja-1.13.1.bottle_manifest.json
+==> Pouring ninja--1.13.1.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/ninja/1.13.1: 10 files, 438.8KB
+==> Installing ffmpeg dependency: expat
+Warning: A newer Command Line Tools release is available.
+Update them from Software Update in System Settings.
+
+If that doesn't show you any updates, run:
+  sudo rm -rf /Library/Developer/CommandLineTools
+  sudo xcode-select --install
+
+Alternatively, manually download them from:
+  https://developer.apple.com/download/all/.
+You should download the Command Line Tools for Xcode 15.2.
+
+
+
+This is a Tier 2 configuration:
+  https://docs.brew.sh/Support-Tiers#tier-2
+You can report Tier 2 unrelated issues to Homebrew/* repositories!
+Read the above document instead before opening any issues or PRs.
+
+==> ./configure --mandir=/opt/homebrew/Cellar/expat/2.7.2/share/man
+==> make install
+🍺  /opt/homebrew/Cellar/expat/2.7.2: 23 files, 683.2KB, built in 11 seconds
+==> Installing ffmpeg dependency: meson
+==> Downloading https://ghcr.io/v2/homebrew/core/meson/manifests/1.9
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/49d44f548c9d63d6c63859645492d66d61eea3cf2ada07b7ca7a994602355541--meson-1.9.1.bottle_manifest.json
+==> Installing meson dependency: ca-certificates
+==> Downloading https://ghcr.io/v2/homebrew/core/ca-certificates/man
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/426185977a48495074d7594bb26de3d3f6afafc4a03c0d972deaba1cc2ba2861--ca-certificates-2025-09-09.bottle_manifest.json
+==> Pouring ca-certificates--2025-09-09.all.bottle.tar.gz
+==> Regenerating CA certificate bundle from keychain, this may take 
+🍺  /opt/homebrew/Cellar/ca-certificates/2025-09-09: 4 files, 232.9KB
+==> Pouring meson--1.9.1.all.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/meson/1.9.1: 263 files, 3.9MB
+==> Installing ffmpeg dependency: unbound
+Warning: A newer Command Line Tools release is available.
+Update them from Software Update in System Settings.
+
+If that doesn't show you any updates, run:
+  sudo rm -rf /Library/Developer/CommandLineTools
+  sudo xcode-select --install
+
+Alternatively, manually download them from:
+  https://developer.apple.com/download/all/.
+You should download the Command Line Tools for Xcode 15.2.
+
+
+
+This is a Tier 2 configuration:
+  https://docs.brew.sh/Support-Tiers#tier-2
+You can report Tier 2 unrelated issues to Homebrew/* repositories!
+Read the above document instead before opening any issues or PRs.
+
+==> Installing unbound dependency: libnghttp2
+Warning: A newer Command Line Tools release is available.
+Update them from Software Update in System Settings.
+
+If that doesn't show you any updates, run:
+  sudo rm -rf /Library/Developer/CommandLineTools
+  sudo xcode-select --install
+
+Alternatively, manually download them from:
+  https://developer.apple.com/download/all/.
+You should download the Command Line Tools for Xcode 15.2.
+
+
+
+This is a Tier 2 configuration:
+  https://docs.brew.sh/Support-Tiers#tier-2
+You can report Tier 2 unrelated issues to Homebrew/* repositories!
+Read the above document instead before opening any issues or PRs.
+
+==> ./configure --enable-lib-only
+==> make -C lib
+==> make -C lib install
+🍺  /opt/homebrew/Cellar/libnghttp2/1.67.1: 14 files, 741.3KB, built in 15 seconds
+==> ./configure --sysconfdir=/opt/homebrew/etc --enable-event-api --
+==> make
+==> make install
+Warning: The post-install step did not complete successfully
+You can try again using:
+  brew postinstall unbound
+==> Summary
+🍺  /opt/homebrew/Cellar/unbound/1.24.0: 58 files, 6.1MB, built in 47 seconds
+==> Installing ffmpeg dependency: gnutls
+==> Downloading https://ghcr.io/v2/homebrew/core/gnutls/manifests/3.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/c898467b88b87dd70e27cf5320bf2eac03bb12867d2741112463128d3af1f639--gnutls-3.8.10.bottle_manifest.json
+==> Pouring gnutls--3.8.10.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/gnutls/3.8.10: 1,296 files, 11MB
+==> Installing ffmpeg dependency: pcre2
+==> Downloading https://ghcr.io/v2/homebrew/core/pcre2/manifests/10.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/476078c344b0d9fa702da6e94d7fe5dd59bb1897d3fcc12d1b52b4bc0de68854--pcre2-10.46.bottle_manifest.json
+==> Pouring pcre2--10.46.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/pcre2/10.46: 242 files, 6.7MB
+==> Installing ffmpeg dependency: pixman
+==> Downloading https://ghcr.io/v2/homebrew/core/pixman/manifests/0.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/e126e982eb104730948984be72236847b1596aad6f864dd8735e83f5c45520e3--pixman-0.46.4-1.bottle_manifest.json
+==> Pouring pixman--0.46.4.arm64_ventura.bottle.1.tar.gz
+🍺  /opt/homebrew/Cellar/pixman/0.46.4: 11 files, 1.3MB
+==> Installing ffmpeg dependency: bison
+==> Downloading https://ghcr.io/v2/homebrew/core/bison/manifests/3.8
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/0a84b14c20dfba4609542ea4b14a4eb93d369f7f83f373b568017fc7d76b6505--bison-3.8.2.bottle_manifest.json
+==> Pouring bison--3.8.2.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/bison/3.8.2: 100 files, 3.7MB
+==> Installing ffmpeg dependency: gobject-introspection
+Warning: A newer Command Line Tools release is available.
+Update them from Software Update in System Settings.
+
+If that doesn't show you any updates, run:
+  sudo rm -rf /Library/Developer/CommandLineTools
+  sudo xcode-select --install
+
+Alternatively, manually download them from:
+  https://developer.apple.com/download/all/.
+You should download the Command Line Tools for Xcode 15.2.
+
+
+
+This is a Tier 2 configuration:
+  https://docs.brew.sh/Support-Tiers#tier-2
+You can report Tier 2 unrelated issues to Homebrew/* repositories!
+Read the above document instead before opening any issues or PRs.
+
+==> Installing dependencies for gobject-introspection: freetype and glib
+==> Installing gobject-introspection dependency: freetype
+Warning: A newer Command Line Tools release is available.
+Update them from Software Update in System Settings.
+
+If that doesn't show you any updates, run:
+  sudo rm -rf /Library/Developer/CommandLineTools
+  sudo xcode-select --install
+
+Alternatively, manually download them from:
+  https://developer.apple.com/download/all/.
+You should download the Command Line Tools for Xcode 15.2.
+
+
+
+This is a Tier 2 configuration:
+  https://docs.brew.sh/Support-Tiers#tier-2
+You can report Tier 2 unrelated issues to Homebrew/* repositories!
+Read the above document instead before opening any issues or PRs.
+
+==> ./configure --enable-freetype-config --without-harfbuzz
+==> make
+==> make install
+🍺  /opt/homebrew/Cellar/freetype/2.14.1_1: 68 files, 2.6MB, built in 13 seconds
+==> Installing gobject-introspection dependency: glib
+==> Downloading https://ghcr.io/v2/homebrew/core/glib/manifests/2.86
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/b5632e879b4de13053d81def8e05975f37376403192c92f87868969be0558d30--glib-2.86.0.bottle_manifest.json
+==> Pouring glib--2.86.0.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/glib/2.86.0: 504 files, 36.6MB
+==> Installing gobject-introspection
+==> Patching
+==> python3.13 -m venv --system-site-packages --without-pip /opt/hom
+==> python3.13 -m pip --python=/opt/homebrew/Cellar/gobject-introspe
+==> python3.13 -m pip --python=/opt/homebrew/Cellar/gobject-introspe
+==> python3.13 -m pip --python=/opt/homebrew/Cellar/gobject-introspe
+==> python3.13 -m pip --python=/opt/homebrew/Cellar/gobject-introspe
+==> meson setup build -Dpython=/opt/homebrew/Cellar/gobject-introspe
+==> meson compile -C build --verbose
+==> meson install -C build
+🍺  /opt/homebrew/Cellar/gobject-introspection/1.86.0: 784 files, 7.3MB, built in 40 seconds
+==> Installing ffmpeg dependency: harfbuzz
+Warning: A newer Command Line Tools release is available.
+Update them from Software Update in System Settings.
+
+If that doesn't show you any updates, run:
+  sudo rm -rf /Library/Developer/CommandLineTools
+  sudo xcode-select --install
+
+Alternatively, manually download them from:
+  https://developer.apple.com/download/all/.
+You should download the Command Line Tools for Xcode 15.2.
+
+
+
+This is a Tier 2 configuration:
+  https://docs.brew.sh/Support-Tiers#tier-2
+You can report Tier 2 unrelated issues to Homebrew/* repositories!
+Read the above document instead before opening any issues or PRs.
+
+==> meson setup build --default-library=both -Dcairo=enabled -Dcoret
+==> meson compile -C build --verbose
+==> meson install -C build
+🍺  /opt/homebrew/Cellar/harfbuzz/11.5.0: 77 files, 11.7MB, built in 55 seconds
+==> Installing ffmpeg dependency: libass
+==> Downloading https://ghcr.io/v2/homebrew/core/libass/manifests/0.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/536891b34cc358f01c13f52a3e53ecaae3d5674e8d178736bb59ffeb622f6ce6--libass-0.17.4.bottle_manifest.json
+==> Pouring libass--0.17.4.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/libass/0.17.4: 12 files, 616.9KB
+==> Installing ffmpeg dependency: libudfread
+==> Downloading https://ghcr.io/v2/homebrew/core/libudfread/manifest
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/0e101e8cb6cd3d57390b8ae34720c46dc2f4f1e8f0a00aa7be37a93771109d13--libudfread-1.2.0.bottle_manifest.json
+==> Pouring libudfread--1.2.0.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/libudfread/1.2.0: 13 files, 154.1KB
+==> Installing ffmpeg dependency: libbluray
+==> Downloading https://ghcr.io/v2/homebrew/core/libbluray/manifests
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/ced42dd0b6aaee692a221d17cfd9f4b9acb2b1681567a7e5ef9773405190bf81--libbluray-1.4.0.bottle_manifest.json
+==> Pouring libbluray--1.4.0.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/libbluray/1.4.0: 22 files, 1MB
+==> Installing ffmpeg dependency: libmicrohttpd
+==> Downloading https://ghcr.io/v2/homebrew/core/libmicrohttpd/manif
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/6ef43b41bc35826f441d3040a14df0700cf27a4e10a879b1e629e8a6e0e13ad6--libmicrohttpd-1.0.2.bottle_manifest.json
+==> Pouring libmicrohttpd--1.0.2.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/libmicrohttpd/1.0.2: 26 files, 1.5MB
+==> Installing ffmpeg dependency: mbedtls
+==> Downloading https://ghcr.io/v2/homebrew/core/mbedtls/manifests/3
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/f8d4efac4f45534e0b9e8209b23c94ca2ccb5eb43d539f044e3b33313ae6a831--mbedtls-3.6.4.bottle_manifest.json
+==> Pouring mbedtls--3.6.4.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/mbedtls/3.6.4: 198 files, 13.3MB
+==> Installing ffmpeg dependency: libssh
+==> Downloading https://ghcr.io/v2/homebrew/core/libssh/manifests/0.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/7839e3e1d60437dbe9550ea142442db7130880b0e6b8e41d4fb2bd301eaad4f3--libssh-0.11.3.bottle_manifest.json
+==> Pouring libssh--0.11.3.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/libssh/0.11.3: 25 files, 1.5MB
+==> Installing ffmpeg dependency: libogg
+==> Downloading https://ghcr.io/v2/homebrew/core/libogg/manifests/1.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/2771c95e2ec94043bd81d507b7f5068b581ad45cd1d3529739b5fd47a5031fe8--libogg-1.3.6.bottle_manifest.json
+==> Pouring libogg--1.3.6.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/libogg/1.3.6: 103 files, 538.3KB
+==> Installing ffmpeg dependency: libvpx
+==> Downloading https://ghcr.io/v2/homebrew/core/libvpx/manifests/1.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/8339b291c068f0a2d760ab7abbffd80cc3c407611afdd6bf41f26bc0d19aaad6--libvpx-1.15.2.bottle_manifest.json
+==> Pouring libvpx--1.15.2.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/libvpx/1.15.2: 22 files, 4.1MB
+==> Installing ffmpeg dependency: doxygen
+==> Downloading https://ghcr.io/v2/homebrew/core/doxygen/manifests/1
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/83e3a14e1a75aa6f8a75240166f6d3c5a6d52a71528b877d6eca6b5a89c1b13e--doxygen-1.14.0.bottle_manifest.json
+==> Pouring doxygen--1.14.0.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/doxygen/1.14.0: 10 files, 22.7MB
+==> Installing ffmpeg dependency: mpg123
+==> Downloading https://ghcr.io/v2/homebrew/core/mpg123/manifests/1.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/a55086cc563ed9c00774ac1ec06e3d55923e6994eddd17574246773c9be897c5--mpg123-1.33.2.bottle_manifest.json
+==> Pouring mpg123--1.33.2.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/mpg123/1.33.2: 34 files, 2.0MB
+==> Installing ffmpeg dependency: svt-av1
+==> Downloading https://ghcr.io/v2/homebrew/core/svt-av1/manifests/3
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/5f0ebb1578bbbce75f5c9355f6a8365fd17fbfb4c00de5c672d0c32f1ca85f03--svt-av1-3.1.2.bottle_manifest.json
+==> Pouring svt-av1--3.1.2.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/svt-av1/3.1.2: 19 files, 3.2MB
+==> Installing ffmpeg dependency: pango
+==> Downloading https://ghcr.io/v2/homebrew/core/pango/manifests/1.5
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/ea32643cbf5846f78888abe686ccf149be8b572e0a0aaddda213c4c87de922a6--pango-1.57.0.bottle_manifest.json
+==> Pouring pango--1.57.0.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/pango/1.57.0: 69 files, 3.5MB
+==> Installing ffmpeg dependency: theora
+==> Downloading https://ghcr.io/v2/homebrew/core/theora/manifests/1.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/64c0f5cb02e4092a50c5ed8e8407183d148da4ed4c5d581258c31037e443347b--theora-1.2.0.bottle_manifest.json
+==> Pouring theora--1.2.0.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/theora/1.2.0: 126 files, 2.5MB
+==> Installing ffmpeg dependency: x264
+==> Downloading https://ghcr.io/v2/homebrew/core/x264/manifests/r322
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/7b796c3f94d06f7776bf1a8d56422beacdf882a2d0ace0c8730bd997d84bf8d6--x264-r3222.bottle_manifest.json
+==> Pouring x264--r3222.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/x264/r3222: 12 files, 4.3MB
+==> Installing ffmpeg dependency: zeromq
+==> Downloading https://ghcr.io/v2/homebrew/core/zeromq/manifests/4.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/989d9be15d69c6bb45f88c52ab0753ec2a8b814d6196ed3d025b6a85d58c30df--zeromq-4.3.5_2.bottle_manifest.json
+==> Pouring zeromq--4.3.5_2.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/zeromq/4.3.5_2: 85 files, 6.2MB
+==> Installing ffmpeg dependency: zimg
+==> Downloading https://ghcr.io/v2/homebrew/core/zimg/manifests/3.0.
+Already downloaded: /Users/darrenhoward/Library/Caches/Homebrew/downloads/45740a33e379c06fb3de333c55e123be7ff290c395bafa5a9323a2cd02a41c4a--zimg-3.0.6.bottle_manifest.json
+==> Pouring zimg--3.0.6.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/zimg/3.0.6: 28 files, 1.1MB
+==> Installing ffmpeg
+==> Pouring ffmpeg--8.0_1.arm64_ventura.bottle.tar.gz
+🍺  /opt/homebrew/Cellar/ffmpeg/8.0_1: 285 files, 53.1MB
+==> Running `brew cleanup ffmpeg`...
+Disable this behaviour by setting `HOMEBREW_NO_INSTALL_CLEANUP=1`.
+Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+Removing: /opt/homebrew/Cellar/ffmpeg/7.1.1_3... (287 files, 52.4MB)
+==> No outdated dependents to upgrade!
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+
+ * Serving Flask app 'app'
+ * Debug mode: off
+2025-09-22 15:14:17,086 INFO WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.1.110:5001
+2025-09-22 15:14:17,086 INFO Press CTRL+C to quit
+2025-09-22 15:14:31,241 INFO 192.168.1.110 - - [22/Sep/2025 15:14:31] "GET / HTTP/1.1" 404 -
+2025-09-22 15:14:31,296 INFO 192.168.1.110 - - [22/Sep/2025 15:14:31] "GET /favicon.ico HTTP/1.1" 404 -
+2025-09-22 15:14:42,454 INFO 192.168.1.110 - - [22/Sep/2025 15:14:42] "GET / HTTP/1.1" 404 -
+2025-09-22 15:14:50,416 INFO 127.0.0.1 - - [22/Sep/2025 15:14:50] "GET / HTTP/1.1" 404 -
+2025-09-22 15:14:50,464 INFO 127.0.0.1 - - [22/Sep/2025 15:14:50] "GET /favicon.ico HTTP/1.1" 404 -
+2025-09-22 15:14:50,478 INFO 127.0.0.1 - - [22/Sep/2025 15:14:50] "GET /apple-touch-icon-precomposed.png HTTP/1.1" 404 -
+2025-09-22 15:14:50,602 INFO 127.0.0.1 - - [22/Sep/2025 15:14:50] "GET /apple-touch-icon.png HTTP/1.1" 404 -
+curl http://127.0.0.1:5001/presets
+
+zsh: terminated  python app.py
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % curl http://127.0
+.0.1:5001/presets
+curl: (7) Failed to connect to 127.0.0.1 port 5001 after 0 ms: Couldn't connect to server
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % cd "/Users/darrenhoward/Desktop/desk stuff/VoiceLabFX_LiveDeploy"
+python app.py
+
+ * Serving Flask app 'app'
+ * Debug mode: off
+2025-09-22 15:57:39,527 INFO WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.1.110:5001
+2025-09-22 15:57:39,527 INFO Press CTRL+C to quit
+2025-09-22 15:58:49,040 INFO 127.0.0.1 - - [22/Sep/2025 15:58:49] "GET / HTTP/1.1" 404 -
+2025-09-22 15:58:54,753 INFO 192.168.1.110 - - [22/Sep/2025 15:58:54] "GET / HTTP/1.1" 404 -
+
+ *  History restored 
+
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+grep -n "concurrency_count" app.py
+
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+pkill -f app.py
+
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+cd /Users/darrenhoward/Desktop/desk\ stuff/VoiceLabFX_LiveDeploy
+python app.py
+
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+python app.py
+
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+python app.py
+
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+Traceback (most recent call last):
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/queueing.py", line 745, in process_events
+    response = await route_utils.call_process_api(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/route_utils.py", line 354, in call_process_api
+    output = await app.get_blocks().process_api(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/blocks.py", line 2112, in process_api
+    inputs = await self.preprocess_data(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/blocks.py", line 1741, in preprocess_data
+    self.validate_inputs(block_fn, inputs)
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/blocks.py", line 1723, in validate_inputs
+    raise ValueError(
+ValueError: An event handler (do_process) didn't receive enough input values (needed: 31, got: 27).
+Check if the event handler calls a Javascript function, and make sure its return value is correct.
+Wanted inputs:
+    [<gradio.components.audio.Audio object at 0x2a4108d70>, <gradio.components.dropdown.Dropdown object at 0x2a4db3200>, <gradio.components.file.File object at 0x2a4dd1520>, <gradio.components.file.File object at 0x2a4db0350>, <gradio.components.number.Number object at 0x2a4bb24e0>, <gradio.components.slider.Slider object at 0x2a4d2e4b0>, <gradio.components.slider.Slider object at 0x2a40008c0>, <gradio.components.checkbox.Checkbox object at 0x2a4d2f6b0>, <gradio.components.slider.Slider object at 0x2a7026900>, <gradio.components.slider.Slider object at 0x2a7009e80>, <gradio.components.slider.Slider object at 0x2a4d2e180>, <gradio.components.slider.Slider object at 0x2a4158c20>, <gradio.components.slider.Slider object at 0x2a402c2c0>, <gradio.components.slider.Slider object at 0x2a4df7140>, <gradio.components.slider.Slider object at 0x2a703dd60>, <gradio.components.slider.Slider object at 0x2a703c650>, <gradio.components.slider.Slider object at 0x2a4df75c0>, <gradio.components.slider.Slider object at 0x2a4df4080>, <gradio.components.slider.Slider object at 0x2a4df6cc0>, <gradio.components.slider.Slider object at 0x2a4df6870>, <gradio.components.slider.Slider object at 0x2a4db3740>, <gradio.components.slider.Slider object at 0x2a7053080>, <gradio.components.slider.Slider object at 0x2a70532f0>, <gradio.components.slider.Slider object at 0x2a7053320>, <gradio.components.slider.Slider object at 0x2a7053350>, <gradio.components.slider.Slider object at 0x2a7053380>, <gradio.components.slider.Slider object at 0x2a70533b0>, <gradio.components.slider.Slider object at 0x2a70533e0>, <gradio.components.slider.Slider object at 0x2a7053410>, <gradio.components.slider.Slider object at 0x2a7053440>, <gradio.components.slider.Slider object at 0x2a7053470>]
+Received inputs:
+    [{'path': '/private/var/folders/j6/cf8p0m0j2zn7qc10n8967qc00000gn/T/gradio/3da4f75083073a04a352911dfb5ad80890947cbac08f01454732d15e26487633/sample_voice.wav', 'url': 'http://0.0.0.0:7860/gradio_api/file=/private/var/folders/j6/cf8p0m0j2zn7qc10n8967qc00000gn/T/gradio/3da4f75083073a04a352911dfb5ad80890947cbac08f01454732d15e26487633/sample_voice.wav', 'orig_name': 'sample_voice.wav', 'size': 5556950, 'mime_type': 'audio/wav', 'meta': {'_type': 'gradio.FileData'}}, "Cellphone Spotty", None, {'path': '/private/var/folders/j6/cf8p0m0j2zn7qc10n8967qc00000gn/T/gradio/eaa58cbf8b371fd99c9a5f12f5c68ae8480816cdaca51a81d7f4b2d199dcd287/street_E.wav', 'url': 'http://0.0.0.0:7860/gradio_api/file=/private/var/folders/j6/cf8p0m0j2zn7qc10n8967qc00000gn/T/gradio/eaa58cbf8b371fd99c9a5f12f5c68ae8480816cdaca51a81d7f4b2d199dcd287/street_E.wav', 'orig_name': 'street_E.wav', 'size': 28405586, 'mime_type': 'audio/wav', 'meta': {'_type': 'gradio.FileData'}}, 0, 1, -10, -10, False, 5, 3, 0.5, 0, 50, 4000, 64, False, 0, 140, 75, -40, 0, 0, 0, 0, 60, 1]
+Traceback (most recent call last):
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/queueing.py", line 745, in process_events
+    response = await route_utils.call_process_api(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/route_utils.py", line 354, in call_process_api
+    output = await app.get_blocks().process_api(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/blocks.py", line 2112, in process_api
+    inputs = await self.preprocess_data(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/blocks.py", line 1741, in preprocess_data
+    self.validate_inputs(block_fn, inputs)
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/blocks.py", line 1723, in validate_inputs
+    raise ValueError(
+ValueError: An event handler (do_process) didn't receive enough input values (needed: 31, got: 27).
+Check if the event handler calls a Javascript function, and make sure its return value is correct.
+Wanted inputs:
+    [<gradio.components.audio.Audio object at 0x2a4108d70>, <gradio.components.dropdown.Dropdown object at 0x2a4db3200>, <gradio.components.file.File object at 0x2a4dd1520>, <gradio.components.file.File object at 0x2a4db0350>, <gradio.components.number.Number object at 0x2a4bb24e0>, <gradio.components.slider.Slider object at 0x2a4d2e4b0>, <gradio.components.slider.Slider object at 0x2a40008c0>, <gradio.components.checkbox.Checkbox object at 0x2a4d2f6b0>, <gradio.components.slider.Slider object at 0x2a7026900>, <gradio.components.slider.Slider object at 0x2a7009e80>, <gradio.components.slider.Slider object at 0x2a4d2e180>, <gradio.components.slider.Slider object at 0x2a4158c20>, <gradio.components.slider.Slider object at 0x2a402c2c0>, <gradio.components.slider.Slider object at 0x2a4df7140>, <gradio.components.slider.Slider object at 0x2a703dd60>, <gradio.components.slider.Slider object at 0x2a703c650>, <gradio.components.slider.Slider object at 0x2a4df75c0>, <gradio.components.slider.Slider object at 0x2a4df4080>, <gradio.components.slider.Slider object at 0x2a4df6cc0>, <gradio.components.slider.Slider object at 0x2a4df6870>, <gradio.components.slider.Slider object at 0x2a4db3740>, <gradio.components.slider.Slider object at 0x2a7053080>, <gradio.components.slider.Slider object at 0x2a70532f0>, <gradio.components.slider.Slider object at 0x2a7053320>, <gradio.components.slider.Slider object at 0x2a7053350>, <gradio.components.slider.Slider object at 0x2a7053380>, <gradio.components.slider.Slider object at 0x2a70533b0>, <gradio.components.slider.Slider object at 0x2a70533e0>, <gradio.components.slider.Slider object at 0x2a7053410>, <gradio.components.slider.Slider object at 0x2a7053440>, <gradio.components.slider.Slider object at 0x2a7053470>]
+Received inputs:
+    [{'path': '/private/var/folders/j6/cf8p0m0j2zn7qc10n8967qc00000gn/T/gradio/3da4f75083073a04a352911dfb5ad80890947cbac08f01454732d15e26487633/sample_voice.wav', 'url': 'http://0.0.0.0:7860/gradio_api/file=/private/var/folders/j6/cf8p0m0j2zn7qc10n8967qc00000gn/T/gradio/3da4f75083073a04a352911dfb5ad80890947cbac08f01454732d15e26487633/sample_voice.wav', 'orig_name': 'sample_voice.wav', 'size': 5556950, 'mime_type': 'audio/wav', 'meta': {'_type': 'gradio.FileData'}}, "Cellphone Spotty", None, {'path': '/private/var/folders/j6/cf8p0m0j2zn7qc10n8967qc00000gn/T/gradio/eaa58cbf8b371fd99c9a5f12f5c68ae8480816cdaca51a81d7f4b2d199dcd287/street_E.wav', 'url': 'http://0.0.0.0:7860/gradio_api/file=/private/var/folders/j6/cf8p0m0j2zn7qc10n8967qc00000gn/T/gradio/eaa58cbf8b371fd99c9a5f12f5c68ae8480816cdaca51a81d7f4b2d199dcd287/street_E.wav', 'orig_name': 'street_E.wav', 'size': 28405586, 'mime_type': 'audio/wav', 'meta': {'_type': 'gradio.FileData'}}, 0, 1, -10, -10, False, 5, 3, 0.5, 0, 50, 4000, 64, False, 0, 140, 75, -40, 0, 0, 0, 0, 60, 1]
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+Voice-Lab-Initiative-Gradio-UI-setuVoice-Lab-Initiative-Gradio-UI-setup
+zsh: command not found: Voice-Lab-Initiative-Gradio-UI-setuVoice-Lab-Initiative-Gradio-UI-setup
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+http://0.0.0.0:786 
+zsh: no such file or directory: http://0.0.0.0:786
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+
+ *  History restored 
+
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % cd /Users/darrenhoward/Desktop/desk\ stuff/VoiceLabFX_LiveDeploy
+python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+* Running on local URL:  http://0.0.0.
+zsh: command not found: CHANGELOG.md
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy %
+* Running on local URL:  http://0.0.0.
+zsh: command not found: CHANGELOG.md
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+zsh: command not found: CHANGELOG.md
+zsh: parse error near `()'
+zsh: parse error in command substitution
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+Traceback (most recent call last):
+  File "/Users/darrenhoward/Desktop/desk stuff/VoiceLabFX_LiveDeploy/app.py", line 517, in <module>
+    demo = create_app()
+           ^^^^^^^^^^^^
+  File "/Users/darrenhoward/Desktop/desk stuff/VoiceLabFX_LiveDeploy/app.py", line 330, in create_app
+    preset_names = sorted((presets_state.value.get("presets") or {}).keys())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'keys'
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % 
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+
+ *  History restored 
+
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+Traceback (most recent call last):
+  File "/Users/darrenhoward/Desktop/desk stuff/VoiceLabFX_LiveDeploy/app.py", line 707, in <module>
+    app = create_app()
+          ^^^^^^^^^^^^
+  File "/Users/darrenhoward/Desktop/desk stuff/VoiceLabFX_LiveDeploy/app.py", line 515, in create_app
+    mic = gr.Audio(source="upload", type="filepath", label="Input WAV/MP3/FLAC/etc.")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/component_meta.py", line 189, in wrapper
+    return fn(self, **kwargs)
+           ^^^^^^^^^^^^^^^^^^
+TypeError: Audio.__init__() got an unexpected keyword argument 'source'
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+Traceback (most recent call last):
+  File "/Users/darrenhoward/Desktop/desk stuff/VoiceLabFX_LiveDeploy/app.py", line 709, in <module>
+    app = create_app()
+          ^^^^^^^^^^^^
+  File "/Users/darrenhoward/Desktop/desk stuff/VoiceLabFX_LiveDeploy/app.py", line 521, in create_app
+    preset_dd = gr.Dropdown(choices=sorted(prs_state.value['presets'].keys()) or ["Default"],
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'keys'
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+Traceback (most recent call last):
+  File "/Users/darrenhoward/Desktop/desk stuff/VoiceLabFX_LiveDeploy/app.py", line 719, in <module>
+    app = create_app()
+          ^^^^^^^^^^^^
+  File "/Users/darrenhoward/Desktop/desk stuff/VoiceLabFX_LiveDeploy/app.py", line 600, in create_app
+    run.click(
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/events.py", line 746, in event_trigger
+    return Dependency(block, dep.get_config(), dep_index, fn)
+                             ^^^^^^^^^^^^^^^^
+  File "/Users/darrenhoward/.pyenv/versions/3.12.7/lib/python3.12/site-packages/gradio/block_function.py", line 142, in get_config
+    "inputs": [block._id for block in self.inputs],
+               ^^^^^^^^^
+AttributeError: 'int' object has no attribute '_id'
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+python app.py
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+^CKeyboard interruption in main thread... closing server.
+python app.py
+darrenhoward@MacBook-Pro-4 VoiceLabFX_LiveDeploy % python app.py
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
